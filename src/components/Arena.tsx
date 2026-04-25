@@ -42,45 +42,58 @@ function mulberry32(a: number) {
 }
 const rng = mulberry32(12345);
 
-const OBSTACLES = Array.from({ length: 150 }).map(() => {
-  const type = 'box';
-  const x = (rng() - 0.5) * 170; // Avoid edges
-  const z = (rng() - 0.5) * 170;
-  
-  // Keep center somewhat clear
-  if (Math.abs(x) < 20 && Math.abs(z) < 20) return null;
-
-  const height = rng() * 8 + 6;
-  const isHorizontal = rng() > 0.5;
-  const width = isHorizontal ? rng() * 25 + 10 : rng() * 3 + 1;
-  const depth = isHorizontal ? rng() * 3 + 1 : rng() * 25 + 10;
-  const rotation = 0; // Axis aligned for maze feel
-  const color = rng() > 0.5 ? "#00ffff" : "#ff00ff";
-
-  return { type, position: [x, height / 2 - 0.5, z], size: [width, height, depth], rotation: [0, rotation, 0], color };
-}).filter(Boolean);
-
 export function Arena() {
   const isMobile = useIsMobile();
   
   const obstacles = useMemo(() => {
-    const count = isMobile ? 60 : 150;
+    const gridSize = isMobile ? 8 : 12;
+    const cellSize = 170 / gridSize;
     const rngLocal = mulberry32(12345);
-    return Array.from({ length: count }).map(() => {
-      const type = 'box';
-      const x = (rngLocal() - 0.5) * 170;
-      const z = (rngLocal() - 0.5) * 170;
-      
-      if (Math.abs(x) < 20 && Math.abs(z) < 20) return null;
+    
+    const obs = [];
+    for (let i = 0; i < gridSize; i++) {
+      for (let j = 0; j < gridSize; j++) {
+        // Randomly skip some cells to create paths and variety
+        // Higher skip rate for mobile or to create more space
+        if (rngLocal() > (isMobile ? 0.6 : 0.75)) continue;
 
-      const height = rngLocal() * 8 + 6;
-      const isHorizontal = rngLocal() > 0.5;
-      const width = isHorizontal ? rngLocal() * 25 + 10 : rngLocal() * 3 + 1;
-      const depth = isHorizontal ? rngLocal() * 3 + 1 : rngLocal() * 25 + 10;
-      const color = rngLocal() > 0.5 ? "#00ffff" : "#ff00ff";
+        const cellX = -85 + i * cellSize;
+        const cellZ = -85 + j * cellSize;
 
-      return { type, position: [x, height / 2 - 0.5, z], size: [width, height, depth], rotation: [0, 0, 0], color };
-    }).filter(Boolean);
+        // Jitter within the cell
+        const jitterX = (rngLocal() - 0.5) * cellSize * 0.6;
+        const jitterZ = (rngLocal() - 0.5) * cellSize * 0.6;
+        const x = cellX + cellSize/2 + jitterX;
+        const z = cellZ + cellSize/2 + jitterZ;
+
+        // Keep center clear for player spawn and core gameplay
+        if (Math.abs(x) < 25 && Math.abs(z) < 25) continue;
+
+        // Avoid spawning exactly on enemy spawn points
+        const onSpawnPoint = ENEMY_SPAWN_POINTS.some(sp => 
+          Math.sqrt(Math.pow(x - sp.position[0], 2) + Math.pow(z - sp.position[2], 2)) < 15
+        );
+        if (onSpawnPoint) continue;
+
+        const type = 'box';
+        const height = rngLocal() * 8 + 6;
+        const isHorizontal = rngLocal() > 0.5;
+        
+        // Scale dimensions based on cell size to prevent too much overlap
+        const width = isHorizontal ? rngLocal() * (cellSize * 1.2) + 5 : rngLocal() * 3 + 2;
+        const depth = isHorizontal ? rngLocal() * 3 + 2 : rngLocal() * (cellSize * 1.2) + 5;
+        const color = rngLocal() > 0.5 ? "#00ffff" : "#ff00ff";
+
+        obs.push({ 
+          type, 
+          position: [x, height / 2 - 0.5, z] as [number, number, number], 
+          size: [width, height, depth] as [number, number, number], 
+          rotation: [0, 0, 0] as [number, number, number], 
+          color 
+        });
+      }
+    }
+    return obs;
   }, [isMobile]);
 
   return (

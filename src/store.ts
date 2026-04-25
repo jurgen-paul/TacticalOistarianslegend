@@ -8,11 +8,64 @@ import * as THREE from 'three';
 import { io, Socket } from 'socket.io-client';
 
 import { soundManager } from './lib/sounds';
+import { Relic, INITIAL_RELICS, fusionEngine } from './services/fusionEngine';
 
 export type GameState = 'menu' | 'playing' | 'gameover';
 export type EntityState = 'active' | 'disabled';
 
 export type EnemyType = 'scout' | 'tank' | 'sniper' | 'standard' | 'ghost';
+
+export type MoraleLevel = "High" | "Neutral" | "Low" | "Broken";
+
+export interface VoiceLine {
+  id: string;
+  speaker: string;
+  line: string;
+  timestamp: number;
+}
+
+export interface Trigger {
+  condition: (state: GameStore) => boolean;
+  effect: (state: GameStore) => Partial<GameStore> | void;
+}
+
+export interface SquadMember {
+  name: string;
+  morale: number;
+  status: "Active" | "Wounded" | "Compromised";
+}
+
+export interface Mission {
+  id: string;
+  title: string;
+  description: string;
+  objectives: string[];
+  environment: string;
+  enemies: EnemyType[];
+  triggers: Record<string, Trigger>;
+}
+
+export const MISSIONS: Mission[] = [
+  {
+    id: "vault_breathes",
+    title: "THE VAULT BREATHES",
+    description: "Navigate the pulse-reactive corridors of the Eden Vault.",
+    objectives: ["Navigate corridors", "Disable AI sentinels"],
+    environment: "Pulse-reactive corridors",
+    enemies: ["ghost", "standard"],
+    triggers: {
+      betrayal: {
+        condition: (state) => state.trustScore < 60,
+        effect: (state) => {
+          const squad = state.squad.map(m => 
+            m.name === "Echo Vanguard" ? { ...m, status: "Compromised" as const } : m
+          );
+          return { squad };
+        }
+      }
+    }
+  }
+];
 
 export interface LegendData {
   id: string;
@@ -21,7 +74,7 @@ export interface LegendData {
   speed: number;
   dashCooldown: number;
   abilityCooldown: number;
-  specialAbility: 'emp' | 'overdrive';
+  specialAbility: 'emp' | 'overdrive' | 'stealth' | 'shield' | 'jamming' | 'breach';
   rarity: 'common' | 'rare' | 'epic';
 }
 
@@ -44,6 +97,96 @@ export const LEGENDS: LegendData[] = [
     dashCooldown: 1200, 
     abilityCooldown: 12000, 
     specialAbility: 'overdrive',
+    rarity: 'epic'
+  },
+  {
+    id: 'nasser',
+    name: 'Ahmed Nasser',
+    description: 'Recon & Surveillance. Expertise in comms jamming and stealth reconnaissance.',
+    speed: 1.2,
+    dashCooldown: 1500,
+    abilityCooldown: 14000,
+    specialAbility: 'jamming',
+    rarity: 'rare'
+  },
+  {
+    id: 'varga',
+    name: 'Sofia Varga',
+    description: 'Intelligence field operative. Masters signal interception and cyber infiltration.',
+    speed: 1.1,
+    dashCooldown: 1800,
+    abilityCooldown: 13000,
+    specialAbility: 'emp',
+    rarity: 'epic'
+  },
+  {
+    id: 'tank_brooks',
+    name: 'Darnell Brooks',
+    description: 'Heavy Assault & Breach. Urban warfare veteran known for tactical demolition.',
+    speed: 0.9,
+    dashCooldown: 2500,
+    abilityCooldown: 16000,
+    specialAbility: 'breach',
+    rarity: 'rare'
+  },
+  {
+    id: 'toma',
+    name: 'Elira Toma',
+    description: 'Long-Range Recon & Survival. Expert tracker raised in remote highlands.',
+    speed: 1.3,
+    dashCooldown: 1300,
+    abilityCooldown: 11000,
+    specialAbility: 'stealth',
+    rarity: 'rare'
+  },
+  {
+    id: 'ramires',
+    name: 'Kael Ramires',
+    description: 'Experimental Bio-Tech unit with enhanced neural combant interface.',
+    speed: 1.5,
+    dashCooldown: 1000,
+    abilityCooldown: 18000,
+    specialAbility: 'overdrive',
+    rarity: 'epic'
+  },
+  {
+    id: 'thorne',
+    name: 'Malrik Thorne',
+    description: 'Crimson Vow Ritualist. Master of oathblade discipline and combat meditation.',
+    speed: 1.1,
+    dashCooldown: 1600,
+    abilityCooldown: 12000,
+    specialAbility: 'shield',
+    rarity: 'epic'
+  },
+  {
+    id: 'nyx',
+    name: 'Nyx',
+    description: 'Echo Syndicate Cipher. Operates with digital cloaking and neural disruption.',
+    speed: 1.2,
+    dashCooldown: 1400,
+    abilityCooldown: 15000,
+    specialAbility: 'jamming',
+    rarity: 'epic'
+  },
+  {
+    id: 'moss',
+    name: 'Kaela Moss',
+    description: 'Verdant Pact Warden. Expert in terrain adaptation and biotech fieldcraft.',
+    speed: 1.2,
+    dashCooldown: 1500,
+    abilityCooldown: 13000,
+    specialAbility: 'stealth',
+    rarity: 'rare'
+  },
+  {
+    id: 'vex_9',
+    name: 'Vex-9',
+    description: 'Iron Dominion Enforcer. Cybernetic heavy assault with reinforced exo-frame.',
+    speed: 0.85,
+    dashCooldown: 3000,
+    abilityCooldown: 20000,
+    specialAbility: 'shield',
     rarity: 'epic'
   }
 ];
@@ -121,6 +264,44 @@ export interface HazardData {
 }
 
 export type AttachmentType = 'scope' | 'grip' | 'barrel';
+export type WeaponType = 'assault_rifle' | 'plasma_rifle';
+
+export interface Weapon {
+  id: WeaponType;
+  name: string;
+  description: string;
+  type: 'auto' | 'charge_burst';
+  baseDamage: number;
+  fireRate: number; // ms delay
+  recoil: number;
+  chargeTime?: number;
+  burstCount?: number;
+  burstDelay?: number;
+}
+
+export const WEAPONS: Record<WeaponType, Weapon> = {
+  assault_rifle: {
+    id: 'assault_rifle',
+    name: 'A-7 Vanguard',
+    description: 'Reliable automatic rifle for standard deployment.',
+    type: 'auto',
+    baseDamage: 25,
+    fireRate: 150,
+    recoil: 0.4
+  },
+  plasma_rifle: {
+    id: 'plasma_rifle',
+    name: 'P-9 Pulse Nova',
+    description: 'High-energy weapon requiring charge-up for devastating micro-bursts.',
+    type: 'charge_burst',
+    baseDamage: 45,
+    fireRate: 800,
+    recoil: 0.8,
+    chargeTime: 800,
+    burstCount: 3,
+    burstDelay: 60
+  }
+};
 
 export interface Attachment {
   id: string;
@@ -187,6 +368,10 @@ interface GameStore {
   otherPlayers: Record<string, PlayerData>;
 
   // Weapon Customization
+  selectedWeapon: Weapon;
+  setWeapon: (weapon: Weapon) => void;
+  plasmaCharge: number;
+  setPlasmaCharge: (charge: number) => void;
   weaponAttachments: {
     scope: Attachment;
     grip: Attachment;
@@ -196,10 +381,32 @@ interface GameStore {
   zoomSensitivity: number;
   setZoomSensitivity: (sensitivity: number) => void;
 
+  // Relic Fusion System
+  relics: Relic[];
+  relicCodex: Relic[];
+  fusionHistory: string[];
+  addRelic: (relic: Relic) => void;
+  fuseRelics: (idA: string, idB: string) => void;
+
+  // Narrative / Tactical Systems
+  trustScore: number;
+  moralityScore: number;
+  squad: SquadMember[];
+  currentMission: Mission | null;
+  activeVoiceLines: VoiceLine[];
+  setTrustScore: (score: number) => void;
+  setMoralityScore: (score: number) => void;
+  addVoiceLine: (speaker: string, line: string) => void;
+  checkTriggers: () => void;
+
   // Legends
   selectedLegend: LegendData;
   setSelectedLegend: (legend: LegendData) => void;
   overdriveActiveUntil: number;
+  stealthActiveUntil: number;
+  shieldActiveUntil: number;
+  jammingActiveUntil: number;
+  breachActiveUntil: number;
 
   startGame: () => void;
   endGame: () => void;
@@ -300,11 +507,80 @@ export const useGameStore = create<GameStore>((set, get) => ({
     barrel: ATTACHMENTS.barrel[0],
   },
 
+  selectedWeapon: WEAPONS.assault_rifle,
+  setWeapon: (selectedWeapon) => set({ selectedWeapon }),
+  plasmaCharge: 0,
+  setPlasmaCharge: (plasmaCharge) => set({ plasmaCharge }),
+
   zoomSensitivity: 0.5,
+
+  relics: INITIAL_RELICS,
+  relicCodex: INITIAL_RELICS,
+  fusionHistory: [],
+
+  addRelic: (relic) => set(state => ({
+    relics: [...state.relics, relic],
+    relicCodex: state.relicCodex.find(r => r.name === relic.name) ? state.relicCodex : [...state.relicCodex, relic]
+  })),
+
+  fuseRelics: (idA, idB) => set(state => {
+    const a = state.relics.find(r => r.id === idA);
+    const b = state.relics.find(r => r.id === idB);
+    if (!a || !b) return state;
+
+    const { relic: fused, achievement } = fusionEngine.initiateFusion(a, b);
+    soundManager.play('ready', 0.8);
+    
+    const newEvents = [...state.events];
+    newEvents.push({ id: Math.random().toString(), message: `NEW RELIC DISCOVERED: ${fused.name}`, timestamp: Date.now() });
+    
+    if (achievement) {
+      newEvents.push({ id: Math.random().toString(), message: `🏆 ACHIEVEMENT UNLOCKED: ${achievement.replace(/_/g, ' ')}`, timestamp: Date.now() });
+    }
+
+    return {
+      relics: state.relics.filter(r => r.id !== idA && r.id !== idB).concat(fused),
+      relicCodex: state.relicCodex.some(r => r.name === fused.name) ? state.relicCodex : [...state.relicCodex, fused],
+      fusionHistory: [`Fused ${a.name} + ${b.name} into ${fused.name}`, ...state.fusionHistory].slice(0, 5),
+      events: newEvents
+    };
+  }),
+
+  trustScore: 100,
+  moralityScore: 50,
+  squad: [
+    { name: "Echo Vanguard", morale: 85, status: "Active" },
+    { name: "Oistarian", morale: 90, status: "Active" }
+  ],
+  currentMission: MISSIONS[0],
+  activeVoiceLines: [],
+
+  setTrustScore: (trustScore) => set({ trustScore }),
+  setMoralityScore: (moralityScore) => set({ moralityScore }),
+  
+  addVoiceLine: (speaker, line) => set(state => ({
+    activeVoiceLines: [{ id: Math.random().toString(), speaker, line, timestamp: Date.now() }, ...state.activeVoiceLines].slice(0, 3)
+  })),
+
+  checkTriggers: () => {
+    const state = get();
+    if (!state.currentMission) return;
+
+    Object.entries(state.currentMission.triggers).forEach(([key, trigger]) => {
+      if (trigger.condition(state)) {
+        const result = trigger.effect(state);
+        if (result) set(result);
+      }
+    });
+  },
 
   selectedLegend: LEGENDS[0],
   setSelectedLegend: (selectedLegend) => set({ selectedLegend }),
   overdriveActiveUntil: 0,
+  stealthActiveUntil: 0,
+  shieldActiveUntil: 0,
+  jammingActiveUntil: 0,
+  breachActiveUntil: 0,
 
   setAttachment: (type, attachment) => set((state) => ({
     weaponAttachments: { ...state.weaponAttachments, [type]: attachment }
@@ -326,6 +602,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     soundManager.enable();
     soundManager.play('alert', 0.3);
     const { socket } = get();
+
+    setTimeout(() => {
+      get().addVoiceLine("NEXUS ONE", "Mission parameters initialized. Eden Vault location confirmed. Proceed with caution.");
+    }, 2000);
     
     if (socket) {
       socket.disconnect();
@@ -514,17 +794,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (state.socket) state.socket.disconnect();
       return { timeLeft: 0, gameState: 'gameover', socket: null, roomId: null };
     }
-    return { timeLeft: newTime, dashReadyNotified, empReadyNotified };
+
+    state.checkTriggers();
+    
+    // Cleanup old voice lines
+    const activeVoiceLines = state.activeVoiceLines.filter(v => now - v.timestamp < 6000);
+
+    return { timeLeft: newTime, dashReadyNotified, empReadyNotified, activeVoiceLines };
   }),
 
   hitPlayer: () => set((state) => {
     if (state.playerState === 'disabled' || state.gameState !== 'playing') return state;
+    if (Date.now() < state.shieldActiveUntil) {
+      soundManager.play('ready', 0.2); // Shield block sound
+      return state;
+    }
     soundManager.play('damage', 0.6);
+    
+    // Narrative consequence: Losing trust on failure
+    const newTrust = Math.max(0, state.trustScore - 2);
+    if (state.trustScore >= 60 && newTrust < 60) {
+      setTimeout(() => state.addVoiceLine("ECHO VANGUARD", "Commander, your performance is... concerning. Recalibrating loyalty parameters."), 1000);
+    }
+
     return {
       playerState: 'disabled',
       playerDisabledUntil: Date.now() + 3000,
-      score: Math.max(0, state.score - 50), // Penalty for getting hit
-      lastDamageTime: Date.now()
+      score: Math.max(0, state.score - 50),
+      lastDamageTime: Date.now(),
+      trustScore: newTrust
     };
   }),
 
@@ -552,11 +850,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
       return e;
     });
+    const scoreGain = byPlayer ? Math.round(100 * (state.selectedWeapon.baseDamage / 25)) : 0;
     return {
       enemies,
-      score: byPlayer ? state.score + 100 : state.score, // Points for hitting enemy
+      score: state.score + scoreGain,
       lastHitTime: byPlayer ? Date.now() : state.lastHitTime,
-      events: byPlayer ? [...state.events, { id: Math.random().toString(), message: `You tagged ${id}`, timestamp: Date.now() }] : state.events
+      events: byPlayer ? [...state.events, { id: Math.random().toString(), message: `TARGET NEUTRALIZED (+${scoreGain})`, timestamp: Date.now() }] : state.events
     };
   }),
 
@@ -680,8 +979,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   triggerEMP: () => set((state) => {
     if (Date.now() < state.empCooldown) return state;
     const now = Date.now();
+    const ability = state.selectedLegend.specialAbility;
 
-    if (state.selectedLegend.specialAbility === 'overdrive') {
+    if (ability === 'overdrive') {
       soundManager.play('ready', 0.5);
       return {
         empCooldown: now + state.selectedLegend.abilityCooldown,
@@ -690,10 +990,41 @@ export const useGameStore = create<GameStore>((set, get) => ({
         events: [...state.events, { id: Math.random().toString(), message: "OVERDRIVE SYSTEM ENGAGED", timestamp: now }]
       };
     }
+
+    if (ability === 'stealth') {
+      soundManager.play('ready', 0.4);
+      return {
+        empCooldown: now + state.selectedLegend.abilityCooldown,
+        stealthActiveUntil: now + 8000,
+        empReadyNotified: false,
+        events: [...state.events, { id: Math.random().toString(), message: "CLOAKING ENGAGED", timestamp: now }]
+      };
+    }
+
+    if (ability === 'shield') {
+      soundManager.play('ready', 0.6);
+      return {
+        empCooldown: now + state.selectedLegend.abilityCooldown,
+        shieldActiveUntil: now + 6000,
+        empReadyNotified: false,
+        events: [...state.events, { id: Math.random().toString(), message: "KINETIC SHIELD DEPLOYED", timestamp: now }]
+      };
+    }
+
+    if (ability === 'breach') {
+      soundManager.play('alert', 0.5);
+      return {
+        empCooldown: now + state.selectedLegend.abilityCooldown,
+        breachActiveUntil: now + 4000,
+        empReadyNotified: false,
+        events: [...state.events, { id: Math.random().toString(), message: "BREACH PROTOCOL INITIATED", timestamp: now }]
+      };
+    }
     
+    // Default to EMP or Jamming
     soundManager.play('emp', 0.7);
-    const empRange = 30;
-    const duration = 5000;
+    const empRange = ability === 'jamming' ? 60 : 30;
+    const duration = ability === 'jamming' ? 8000 : 5000;
 
     const enemies = state.enemies.map(e => {
       const dist = Math.sqrt(
@@ -710,8 +1041,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       enemies, 
       empCooldown: now + state.selectedLegend.abilityCooldown, 
       empActiveUntil: now + 500,
+      jammingActiveUntil: ability === 'jamming' ? now + 8000 : 0,
       empReadyNotified: false,
-      events: [...state.events, { id: Math.random().toString(), message: "EMP BLAST ACTIVATED", timestamp: now }]
+      events: [...state.events, { id: Math.random().toString(), message: ability === 'jamming' ? "COMMUNICS JAMMED" : "EMP BLAST ACTIVATED", timestamp: now }]
     };
   }),
 
@@ -738,6 +1070,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
             state.addEvent(`${obj.label} SECURED`);
             soundManager.play('objective', 0.6);
             newControlledBy = 'player';
+            
+            // Narrative consequence: Gaining trust on success
+            set(s => ({ trustScore: Math.min(100, s.trustScore + 10) }));
+            state.addVoiceLine("OISTARIAN", "Excellent work. The vault's pulse is stabilizing.");
           }
         } else if (obj.controlledBy !== 'player') {
           newProgress = Math.max(0, obj.progress - decaySpeed * delta);

@@ -32,16 +32,26 @@ export function Player() {
   const zoomSensitivity = useGameStore(state => state.zoomSensitivity);
   const selectedLegend = useGameStore(state => state.selectedLegend);
   const overdriveActiveUntil = useGameStore(state => state.overdriveActiveUntil);
+  const stealthActiveUntil = useGameStore(state => state.stealthActiveUntil);
+  const shieldActiveUntil = useGameStore(state => state.shieldActiveUntil);
+  const jammingActiveUntil = useGameStore(state => state.jammingActiveUntil);
+  const selectedWeapon = useGameStore(state => state.selectedWeapon);
+  const plasmaCharge = useGameStore(state => state.plasmaCharge);
+  const setPlasmaCharge = useGameStore(state => state.setPlasmaCharge);
 
   const keys = useRef({ 
     w: false, a: false, s: false, d: false,
     arrowup: false, arrowdown: false, arrowleft: false, arrowright: false,
     shift: false, e: false
   });
+  const isFiring = useRef(false);
   const [adsActive, setAdsActive] = useState(false);
   const isAiming = useRef(false);
   const lastEmitTime = useRef(0);
   const lastShootTime = useRef(0);
+  const chargeStartTime = useRef(0);
+  const burstRemaining = useRef(0);
+  const lastBurstShotTime = useRef(0);
 
   const gunGroupRef = useRef<THREE.Group>(null);
   const gunVisualRef = useRef<THREE.Group>(null);
@@ -72,12 +82,29 @@ export function Player() {
     window.addEventListener('keyup', handleKeyUp);
     
     const handleMouseDown = (e: MouseEvent) => {
+      if (e.button === 0) { // Left click
+        isFiring.current = true;
+        if (selectedWeapon.id === 'plasma_rifle') {
+          chargeStartTime.current = Date.now();
+        }
+      }
       if (e.button === 2) { // Right click
         isAiming.current = true;
         setAdsActive(true);
       }
     };
     const handleMouseUp = (e: MouseEvent) => {
+      if (e.button === 0) {
+        isFiring.current = false;
+        // Trigger plasma release if charging
+        if (selectedWeapon.id === 'plasma_rifle') {
+          if (plasmaCharge >= 0.9) {
+            burstRemaining.current = selectedWeapon.burstCount || 3;
+          }
+          setPlasmaCharge(0);
+          chargeStartTime.current = 0;
+        }
+      }
       if (e.button === 2) {
         isAiming.current = false;
         setAdsActive(false);
@@ -98,25 +125,27 @@ export function Player() {
   const updatePlayerPosition = useGameStore(state => state.updatePlayerPosition);
 
   // Shooting logic function
-  const shoot = () => {
+  const shoot = (isBurst = false) => {
     if (gameState !== 'playing' || playerState !== 'active') return;
     
     // Rate limit shooting
     const now = Date.now();
-    const baseFireRate = 200;
+    const baseFireRate = selectedWeapon.fireRate;
     const fireRateBoost = weaponAttachments.barrel.stats.fireRateBoost || 0;
     const overdriveBoost = now < overdriveActiveUntil ? 0.4 : 0;
-    const fireRate = baseFireRate * (1 - fireRateBoost - overdriveBoost);
     
-    if (now - lastShootTime.current < fireRate) return;
-    lastShootTime.current = now;
+    // Don't apply fire rate limit for burst shots (they have their own burstDelay)
+    const fireRate = isBurst ? 0 : baseFireRate * (1 - fireRateBoost - overdriveBoost);
+    
+    if (!isBurst && now - lastShootTime.current < fireRate) return;
+    if (!isBurst) lastShootTime.current = now;
 
     // Raycast from camera
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
 
-    // Start raycast slightly ahead of the camera to avoid hitting the player's own collider
-    const rayStart = camera.position.clone().add(raycaster.ray.direction.clone().multiplyScalar(0.8));
+    // Filter to exclude player
+    const rayStart = camera.position.clone().add(raycaster.ray.direction.clone().multiplyScalar(1.2));
     const ray = new rapier.Ray(rayStart, raycaster.ray.direction);
     
     const baseRange = MAX_LASER_DIST;
@@ -136,12 +165,13 @@ export function Player() {
     // Apply recoil
     if (gunVisualRef.current) {
       const recoilReduction = weaponAttachments.grip.stats.recoilReduction || 0;
-      const recoilFactor = 1 - recoilReduction;
-      gunVisualRef.current.position.z = -0.4 * recoilFactor;
-      gunVisualRef.current.rotation.x = 0.1 * recoilFactor;
+      const recoilFactor = (1 - recoilReduction) * selectedWeapon.recoil;
+      gunVisualRef.current.position.z = -0.5 * recoilFactor;
+      gunVisualRef.current.rotation.x = 0.15 * recoilFactor;
     }
 
-    soundManager.play('shoot', 0.4);
+    const laserColor = selectedWeapon.id === 'plasma_rifle' ? '#ff00ff' : '#00ffff';
+    soundManager.play(selectedWeapon.id === 'plasma_rifle' ? (isBurst ? 'shoot' : 'ready') : 'shoot', isBurst ? 0.6 : 0.4);
 
     let endPos: [number, number, number];
 
@@ -156,18 +186,15 @@ export function Player() {
         const name = userData.name;
         
         if (name) {
-          // Check if it's a bot
           if (name.startsWith('bot-')) {
             hitEnemy(name, true);
-          } 
-          // Check if it's another player (socket ID)
-          else if (name !== 'player' && useGameStore.getState().otherPlayers[name]) {
+          } else if (name !== 'player' && useGameStore.getState().otherPlayers[name]) {
             hitEnemy(name, true);
           }
         }
       }
       
-      addParticles(endPos, '#00ffff');
+      addParticles(endPos, laserColor);
     } else {
       endPos = [
         camera.position.x + raycaster.ray.direction.x * MAX_LASER_DIST,
@@ -176,7 +203,7 @@ export function Player() {
       ];
     }
 
-    addLaser(startPos, endPos, '#00ffff');
+    addLaser(startPos, endPos, laserColor);
   };
 
   const hoverSoundRef = useRef<HTMLAudioElement | null>(null);
@@ -203,9 +230,44 @@ export function Player() {
 
     const mobileInput = useGameStore.getState().mobileInput;
 
-    // Handle Mobile Shooting
+    // Handle Burst Firing
+    if (burstRemaining.current > 0) {
+      if (Date.now() - lastBurstShotTime.current > (selectedWeapon.burstDelay || 50)) {
+        shoot(true);
+        burstRemaining.current -= 1;
+        lastBurstShotTime.current = Date.now();
+      }
+    }
+
+    // Handle Mobile Shooting (Treated as Auto for Standard, Charging for Plasma)
     if (mobileInput.shooting) {
-      shoot();
+      if (selectedWeapon.id === 'plasma_rifle') {
+        if (!chargeStartTime.current) chargeStartTime.current = Date.now();
+      } else {
+        shoot();
+      }
+    } else if (selectedWeapon.id === 'plasma_rifle' && chargeStartTime.current > 0) {
+      // Release mobile charge if shooting stopped
+      if (plasmaCharge >= 0.9) burstRemaining.current = selectedWeapon.burstCount || 3;
+      setPlasmaCharge(0);
+      chargeStartTime.current = 0;
+    }
+
+    // Handle Charging Logic
+    if (selectedWeapon.id === 'plasma_rifle' && chargeStartTime.current > 0) {
+      const elapsed = Date.now() - chargeStartTime.current;
+      const charge = Math.min(1, elapsed / (selectedWeapon.chargeTime || 1000));
+      setPlasmaCharge(charge);
+      
+      // Auto-release at 100%? Or wait for mouseUp?
+      // Let's go with auto-release for mobile/keyboard consistency or tactical preference.
+      // Re-reading user: "charges up for a burst fire". Usually implies release.
+      // But for mobile it's easier to auto-fire at max charge if holding.
+      if (charge >= 1 && (mobileInput.shooting || !isFiring.current)) {
+         burstRemaining.current = selectedWeapon.burstCount || 3;
+         setPlasmaCharge(0);
+         chargeStartTime.current = 0;
+      }
     }
 
     // Movement
@@ -375,7 +437,9 @@ export function Player() {
   useEffect(() => {
     const handleClick = () => {
       if (document.pointerLockElement && gameState === 'playing' && playerState === 'active') {
-        shoot();
+        if (selectedWeapon.id === 'assault_rifle') {
+          shoot();
+        }
       }
     };
     window.addEventListener('mousedown', handleClick);
@@ -404,25 +468,64 @@ export function Player() {
           {/* Main Chassis */}
           <mesh position={[0, 0, 0.2]}>
             <boxGeometry args={[0.12, 0.18, 0.5]} />
-            <meshStandardMaterial color="#050510" metalness={0.9} roughness={0.1} />
+            <meshStandardMaterial 
+              color="#050510" 
+              metalness={0.9} 
+              roughness={0.1} 
+              transparent={Date.now() < stealthActiveUntil}
+              opacity={Date.now() < stealthActiveUntil ? 0.3 : 1.0}
+            />
           </mesh>
           {/* Power Core */}
           <mesh position={[0, 0.05, 0.1]}>
             <boxGeometry args={[0.08, 0.08, 0.2]} />
             <meshBasicMaterial 
-              color={Date.now() < overdriveActiveUntil ? "#ff00ff" : "#00ffff"} 
+              color={Date.now() < overdriveActiveUntil ? "#ff00ff" : 
+                     Date.now() < jammingActiveUntil ? "#ffff00" : 
+                     selectedWeapon.id === 'plasma_rifle' ? 
+                        (plasmaCharge > 0.9 ? "#ff00ff" : "#0033ff") : 
+                        "#00ffff"} 
               toneMapped={false} 
+              transparent={Date.now() < stealthActiveUntil}
+              opacity={Date.now() < stealthActiveUntil ? 0.4 : 1.0}
             />
           </mesh>
+          {/* Charge Meter / Glow */}
+          {selectedWeapon.id === 'plasma_rifle' && plasmaCharge > 0.1 && (
+            <mesh position={[0, 0.05, -0.2]}>
+              <sphereGeometry args={[0.1 * plasmaCharge, 16, 16]} />
+              <meshBasicMaterial color="#ff00ff" toneMapped={false} transparent opacity={0.6} />
+            </mesh>
+          )}
           {/* Dual Barrels */}
           <mesh position={[-0.03, 0.02, -0.2]} rotation={[Math.PI / 2, 0, 0]}>
             <cylinderGeometry args={[0.02, 0.02, 0.4, 8]} />
-            <meshStandardMaterial color="#111" metalness={1} roughness={0} />
+            <meshStandardMaterial 
+              color="#111" 
+              metalness={1} 
+              roughness={0} 
+              transparent={Date.now() < stealthActiveUntil}
+              opacity={Date.now() < stealthActiveUntil ? 0.2 : 1.0}
+            />
           </mesh>
           <mesh position={[0.03, 0.02, -0.2]} rotation={[Math.PI / 2, 0, 0]}>
             <cylinderGeometry args={[0.02, 0.02, 0.4, 8]} />
-            <meshStandardMaterial color="#111" metalness={1} roughness={0} />
+            <meshStandardMaterial 
+              color="#111" 
+              metalness={1} 
+              roughness={0} 
+              transparent={Date.now() < stealthActiveUntil}
+              opacity={Date.now() < stealthActiveUntil ? 0.2 : 1.0}
+            />
           </mesh>
+
+          {/* Kinetic Shield Visual */}
+          {Date.now() < shieldActiveUntil && (
+            <mesh position={[0, 0.2, 0]}>
+              <sphereGeometry args={[1.2, 16, 16]} />
+              <meshBasicMaterial color="#00ffff" transparent opacity={0.1} wireframe />
+            </mesh>
+          )}
           {/* Holographic Sight */}
           {weaponAttachments.scope.id !== 'scope-none' && (
             <group position={[0, 0.12, 0.1]}>

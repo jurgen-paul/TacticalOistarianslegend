@@ -23,6 +23,7 @@ export function Enemy({ data }: { data: EnemyData }) {
   
   const gameState = useGameStore(state => state.gameState);
   const playerState = useGameStore(state => state.playerState);
+  const stealthActiveUntil = useGameStore(state => state.stealthActiveUntil);
   const hitPlayer = useGameStore(state => state.hitPlayer);
   const addLaser = useGameStore(state => state.addLaser);
   const addProjectile = useGameStore(state => state.addProjectile);
@@ -79,7 +80,7 @@ export function Enemy({ data }: { data: EnemyData }) {
     let closestDist = stats.chaseDist;
 
     // Check player
-    if (playerState === 'active') {
+    if (playerState === 'active' && Date.now() > stealthActiveUntil) {
       const playerPos = camera.position.clone();
       playerPos.y = pos.y; // Ignore height difference for distance
       const distToPlayer = currentPos.distanceTo(playerPos);

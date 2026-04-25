@@ -6,7 +6,8 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Game } from './components/Game';
 import { MobileControls } from './components/MobileControls';
-import { useGameStore, ATTACHMENTS, AttachmentType, Attachment, LEGENDS } from './store';
+import { useGameStore, ATTACHMENTS, AttachmentType, Attachment, LEGENDS, WEAPONS } from './store';
+import { Relic } from './services/fusionEngine';
 import { Minimap } from './components/Minimap';
 import { getStrategicAdvice } from './lib/gemini';
 
@@ -25,7 +26,14 @@ function HUD() {
   const dashCooldown = useGameStore(state => state.dashCooldown);
   const empCooldown = useGameStore(state => state.empCooldown);
   const objectives = useGameStore(state => state.objectives);
+  const currentMission = useGameStore(state => state.currentMission);
+  const trustScore = useGameStore(state => state.trustScore);
+  const moralityScore = useGameStore(state => state.moralityScore);
+  const squad = useGameStore(state => state.squad);
+  const activeVoiceLines = useGameStore(state => state.activeVoiceLines);
   const selectedLegend = useGameStore(state => state.selectedLegend);
+  const selectedWeapon = useGameStore(state => state.selectedWeapon);
+  const plasmaCharge = useGameStore(state => state.plasmaCharge);
 
   const [showHitMarker, setShowHitMarker] = useState(false);
   const [showDamageFlash, setShowDamageFlash] = useState(false);
@@ -60,6 +68,20 @@ function HUD() {
 
   return (
     <>
+      {/* NPC/Dialogue Overlay */}
+      <div className="absolute bottom-32 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 pointer-events-none z-20">
+        {activeVoiceLines.map((v, i) => (
+          <div 
+            key={v.id} 
+            className="bg-black/60 border-l-2 border-cyan-400 p-3 max-w-lg backdrop-blur-md animate-in fade-in slide-in-from-bottom-4 duration-500"
+            style={{ opacity: 1 - (i * 0.3) }}
+          >
+            <div className="text-[10px] text-cyan-400 font-black uppercase tracking-[0.2em] mb-1">{v.speaker}</div>
+            <div className="text-sm text-cyan-100/90 leading-tight font-accent italic">"{v.line}"</div>
+          </div>
+        ))}
+      </div>
+
       {/* Damage Flash */}
       <div className={`absolute inset-0 bg-red-500/20 pointer-events-none transition-opacity duration-200 ${showDamageFlash ? 'opacity-100' : 'opacity-0'}`} />
 
@@ -163,13 +185,66 @@ function HUD() {
         ))}
       </div>
 
-      {/* HUD Right - Time, Leave, Events */}
+      {/* HUD Right - Time, Leave, Events, Squad */}
       <div className="absolute top-4 right-4 flex flex-col items-end gap-3 pointer-events-auto">
         {gameState === 'playing' && (
-          <div className="bg-black/40 border-r-2 border-cyan-500 p-2 backdrop-blur-sm text-right">
-            <div className="text-cyan-500/50 text-[10px] font-bold tracking-widest uppercase mb-1">Mission Clock</div>
-            <div className="text-cyan-400 text-2xl font-black tabular-nums drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
-              {Math.floor(timeLeft / 60)}:{(Math.floor(timeLeft) % 60).toString().padStart(2, '0')}
+          <div className="flex flex-col gap-3">
+            {/* Mission Intel */}
+            {currentMission && (
+              <div className="bg-black/40 border-r-2 border-cyan-500 p-3 backdrop-blur-sm text-right w-64">
+                <div className="text-cyan-500/50 text-[10px] font-bold tracking-widest uppercase mb-1">Current Sector</div>
+                <div className="text-white text-lg font-black tracking-tighter uppercase mb-2 font-display">{currentMission.title}</div>
+                <div className="space-y-1">
+                  {currentMission.objectives.map((obj, i) => (
+                    <div key={i} className="flex justify-end items-center gap-2 text-[8px] text-cyan-400 font-bold uppercase tracking-widest">
+                      {obj} <div className="w-1 h-1 bg-cyan-400" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Tactical Calibration */}
+            <div className="bg-black/40 border-r-2 border-purple-500 p-3 backdrop-blur-sm text-right w-64">
+              <div className="flex justify-between items-center mb-2">
+                <div className="flex flex-col items-end">
+                  <div className="text-purple-400/50 text-[8px] font-bold uppercase tracking-widest">Trust Index</div>
+                  <div className="text-purple-400 text-sm font-black font-display">{trustScore}%</div>
+                </div>
+                <div className="flex flex-col items-end border-r border-cyan-500/20 pr-2">
+                  <div className="text-cyan-400/50 text-[8px] font-bold uppercase tracking-widest">Morality Score</div>
+                  <div className="text-cyan-400 text-sm font-black font-display">{moralityScore}</div>
+                </div>
+              </div>
+              <div className="h-0.5 bg-white/5 w-full relative">
+                 <div className="h-full bg-purple-500/50 absolute right-0 transition-all duration-1000" style={{ width: `${trustScore}%` }} />
+              </div>
+            </div>
+
+            {/* Squad Pulse */}
+            <div className="bg-black/40 border-r-2 border-cyan-900/30 p-2 backdrop-blur-sm w-64 space-y-2">
+              {squad.map(member => (
+                <div key={member.name} className="flex justify-between items-center">
+                  <div className="flex flex-col">
+                    <div className="text-[9px] text-cyan-100/70 font-black uppercase tracking-widest">{member.name}</div>
+                    <div className={`text-[7px] font-bold uppercase ${member.status === 'Compromised' ? 'text-red-500' : 'text-cyan-500'}`}>
+                      {member.status}
+                    </div>
+                  </div>
+                  <div className="flex gap-0.5">
+                    {[...Array(5)].map((_, i) => (
+                      <div key={i} className={`w-1.5 h-3 ${i < Math.floor(member.morale / 20) ? 'bg-cyan-400' : 'bg-cyan-950'}`} />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-black/40 border-r-2 border-cyan-500 p-2 backdrop-blur-sm text-right">
+              <div className="text-cyan-500/50 text-[10px] font-bold tracking-widest uppercase mb-1">Mission Clock</div>
+              <div className="text-cyan-400 text-2xl font-black tabular-nums drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
+                {Math.floor(timeLeft / 60)}:{(Math.floor(timeLeft) % 60).toString().padStart(2, '0')}
+              </div>
             </div>
           </div>
         )}
@@ -195,7 +270,20 @@ function HUD() {
       </div>
 
       {/* HUD Bottom Right - Abilities */}
-      <div className="absolute bottom-4 right-4 flex gap-4 pointer-events-none">
+      <div className="absolute bottom-4 right-4 flex gap-6 pointer-events-none items-end">
+        {/* Plasma Charge Indicator */}
+        {selectedWeapon.id === 'plasma_rifle' && (
+          <div className="flex flex-col items-end gap-1">
+            <div className="text-[8px] text-purple-500 font-bold uppercase tracking-widest">Plasma Core</div>
+            <div className="w-24 h-2 bg-black/40 border border-purple-500/20 rounded-full overflow-hidden relative">
+              <div 
+                className="h-full bg-purple-500 transition-all duration-100" 
+                style={{ width: `${plasmaCharge * 100}%`, boxShadow: plasmaCharge > 0.9 ? '0 0 10px #ff00ff' : 'none' }} 
+              />
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col items-end gap-1">
           <div className="text-[8px] text-cyan-500/50 font-bold uppercase tracking-widest">Tactical Dash [Shift]</div>
           <div className="w-24 h-1 bg-cyan-900/30 rounded-full overflow-hidden border border-cyan-500/20">
@@ -274,10 +362,28 @@ export default function App() {
   const setAttachment = useGameStore(state => state.setAttachment);
   const selectedLegend = useGameStore(state => state.selectedLegend);
   const setSelectedLegend = useGameStore(state => state.setSelectedLegend);
+  const selectedWeapon = useGameStore(state => state.selectedWeapon);
+  const setWeapon = useGameStore(state => state.setWeapon);
   const isMobile = useIsMobile();
   const [showCustomization, setShowCustomization] = useState(false);
   const [aiAdvice, setAiAdvice] = useState<string | null>(null);
   const [isConsulting, setIsConsulting] = useState(false);
+  const [showFusionLab, setShowFusionLab] = useState(false);
+  const [selectedRelicA, setSelectedRelicA] = useState<string | null>(null);
+  const [selectedRelicB, setSelectedRelicB] = useState<string | null>(null);
+
+  const relics = useGameStore(state => state.relics);
+  const relicCodex = useGameStore(state => state.relicCodex);
+  const fuseRelics = useGameStore(state => state.fuseRelics);
+  const fusionHistory = useGameStore(state => state.fusionHistory);
+
+  const handleFusion = () => {
+    if (selectedRelicA && selectedRelicB) {
+      fuseRelics(selectedRelicA, selectedRelicB);
+      setSelectedRelicA(null);
+      setSelectedRelicB(null);
+    }
+  };
 
   const consultAdvisor = async (playstyle: string) => {
     setIsConsulting(true);
@@ -295,6 +401,149 @@ export default function App() {
 
       {/* UI Overlay */}
       {gameState === 'playing' && <HUD />}
+
+      {/* Fusion Laboratory Overlay */}
+      {showFusionLab && (
+        <div className="absolute inset-0 bg-black/95 z-50 flex flex-col items-center p-8 custom-scrollbar overflow-y-auto">
+          <div className="w-full max-w-6xl flex flex-col items-center">
+            <div className="flex justify-between w-full items-center mb-12 border-b border-cyan-500/20 pb-4">
+              <div>
+                <h2 className="text-4xl font-black text-white font-display tracking-tighter">RELIC <span className="text-cyan-400">FUSION LAB</span></h2>
+                <p className="text-cyan-500/50 text-[10px] font-bold uppercase tracking-widest">NEXUS ONE TRANSFORMATION ENGINE</p>
+              </div>
+              <button 
+                onClick={() => setShowFusionLab(false)}
+                className="text-cyan-400 hover:text-white transition-colors uppercase text-sm font-bold tracking-widest border border-cyan-400/30 px-4 py-2"
+              >
+                Back to Command
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full">
+              {/* Inventory */}
+              <div className="lg:col-span-2 flex flex-col gap-6">
+                <h3 className="text-cyan-400 text-xs font-bold uppercase tracking-widest mb-2 flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full" />
+                  Active Inventory
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {relics.map(relic => (
+                    <button
+                      key={relic.id}
+                      disabled={selectedRelicA === relic.id || selectedRelicB === relic.id}
+                      onClick={() => {
+                        if (!selectedRelicA) setSelectedRelicA(relic.id);
+                        else if (!selectedRelicB) setSelectedRelicB(relic.id);
+                      }}
+                      className={`p-4 border text-left transition-all relative ${
+                        selectedRelicA === relic.id || selectedRelicB === relic.id
+                          ? 'border-cyan-400 bg-cyan-900/40 opacity-50'
+                          : 'border-cyan-900/30 bg-black/40 hover:border-cyan-500/50'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center mb-2">
+                        <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                          relic.tier === 1 ? 'bg-cyan-500/20 text-cyan-400' :
+                          relic.tier === 2 ? 'bg-green-500/20 text-green-400' :
+                          relic.tier === 3 ? 'bg-blue-500/20 text-blue-400' :
+                          relic.tier === 4 ? 'bg-purple-500/20 text-purple-400' :
+                          'bg-yellow-500/20 text-yellow-400'
+                        }`}>
+                          {relic.tier === 1 ? 'COMMON' :
+                           relic.tier === 2 ? 'UNCOMMON' :
+                           relic.tier === 3 ? 'RARE' :
+                           relic.tier === 4 ? 'EPIC' : 'LEGENDARY'}
+                        </span>
+                        <span className="text-[10px] text-white/50 font-mono">#{relic.id.slice(-4)}</span>
+                      </div>
+                      <div className="text-lg font-bold text-white uppercase font-display border-b border-white/5 pb-2 mb-2 group-hover:text-cyan-400 transition-colors">{relic.name}</div>
+                      <div className="flex flex-wrap gap-1 mb-4">
+                        {relic.traits.map(t => (
+                          <span key={t} className="text-[8px] border border-cyan-500/20 px-1 text-cyan-100/50 uppercase">{t}</span>
+                        ))}
+                      </div>
+                      <div className="flex justify-between items-end">
+                        <div className="text-sm font-black text-cyan-400 font-mono">PWR: {relic.powerLevel}</div>
+                        {relic.glyphArtifact && <div className="text-cyan-500/30 text-xs font-black">{relic.glyphArtifact}</div>}
+                      </div>
+                    </button>
+                  ))}
+                  {relics.length === 0 && (
+                    <div className="col-span-full py-20 text-center border border-dashed border-cyan-900/30">
+                      <p className="text-cyan-900 text-sm uppercase tracking-widest font-black">Inventory Empty</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Fusion Chamber */}
+              <div className="flex flex-col gap-8">
+                <div className="bg-cyan-950/20 border-2 border-cyan-400/30 p-8 rounded-sm relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-cyan-400/50 animate-scan" />
+                  <h3 className="text-center text-white font-black uppercase mb-8 tracking-widest font-display">Fusion Chamber</h3>
+                  
+                  <div className="flex flex-col items-center gap-6 mb-8">
+                    <div className={`w-16 h-16 border-2 flex items-center justify-center relative ${selectedRelicA ? 'border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.3)]' : 'border-dashed border-cyan-900/50'}`}>
+                      {selectedRelicA ? (
+                        <button onClick={() => setSelectedRelicA(null)} className="text-xs font-black text-cyan-400">A</button>
+                      ) : (
+                        <div className="text-cyan-900 text-xs text-center leading-tight">CHAMBER<br/>[A]</div>
+                      )}
+                    </div>
+                    <div className="text-cyan-400 font-black text-xl">
+                      <div className="animate-pulse">☍</div>
+                    </div>
+                    <div className={`w-16 h-16 border-2 flex items-center justify-center relative ${selectedRelicB ? 'border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.3)]' : 'border-dashed border-cyan-900/50'}`}>
+                      {selectedRelicB ? (
+                        <button onClick={() => setSelectedRelicB(null)} className="text-xs font-black text-cyan-400">B</button>
+                      ) : (
+                        <div className="text-cyan-900 text-xs text-center leading-tight">CHAMBER<br/>[B]</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    disabled={!selectedRelicA || !selectedRelicB}
+                    onClick={handleFusion}
+                    className={`w-full py-4 font-black uppercase tracking-widest transition-all ${
+                      selectedRelicA && selectedRelicB
+                        ? 'bg-cyan-400 text-black hover:bg-white shadow-[0_0_30px_rgba(34,211,238,0.4)]'
+                        : 'bg-cyan-950 text-cyan-900 opacity-50 cursor-not-allowed'
+                    }`}
+                  >
+                    Initiate Fusion
+                  </button>
+                </div>
+
+                {/* Recent History */}
+                <div className="bg-black/40 border border-cyan-900/30 p-4">
+                  <h4 className="text-[10px] text-cyan-500 font-bold uppercase mb-4 border-b border-cyan-500/10 pb-2">Fusion Logs</h4>
+                  <div className="space-y-3">
+                    {fusionHistory.map((log, i) => (
+                      <div key={i} className="text-[9px] text-cyan-100/50 font-mono leading-tight flex gap-2">
+                        <span className="text-cyan-500">[{i}]</span> {log}
+                      </div>
+                    ))}
+                    {fusionHistory.length === 0 && <div className="text-[10px] text-cyan-900 italic">No fusion records found.</div>}
+                  </div>
+                </div>
+                
+                {/* Codex Stats */}
+                <div className="bg-cyan-400/5 border border-cyan-400/20 p-4">
+                  <div className="text-[10px] text-cyan-400 font-black uppercase mb-1 flex justify-between">
+                    Codex Completion
+                    <span className="text-cyan-800">SYNC: READY</span>
+                  </div>
+                  <div className="flex justify-between items-end">
+                    <div className="text-2xl font-black text-white font-mono">{relicCodex.length} <span className="text-[10px] text-cyan-400">DISCOVERED</span></div>
+                    <div className="text-[8px] text-cyan-500 font-bold">X-99 NEURAL ARCHIVE</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Menus */}
       {gameState === 'menu' && (
@@ -328,16 +577,14 @@ export default function App() {
                   Live Feed: Sector 7
                 </div>
               </div>
-            </div>
-
-            {/* Legend Selection */}
+            </div>            {/* Legend Selection */}
             <h3 className="text-cyan-500/30 text-[10px] font-bold uppercase tracking-[0.5em] mb-6 font-display">Select Tactical Operator</h3>
-            <div className="flex flex-col md:flex-row gap-4 mb-16 w-full max-w-2xl">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-20 w-full">
               {LEGENDS.map((legend: any) => (
                 <button
                   key={legend.id}
                   onClick={() => setSelectedLegend(legend)}
-                  className={`flex-1 p-4 border transition-all duration-300 rounded-sm text-left relative group ${
+                  className={`p-4 border transition-all duration-300 rounded-sm text-left relative group ${
                     selectedLegend.id === legend.id 
                       ? 'bg-cyan-500/20 border-cyan-400 shadow-[0_0_30px_rgba(34,211,238,0.2)]' 
                       : 'bg-black/40 border-cyan-900/30 hover:border-cyan-500/50'
@@ -345,17 +592,20 @@ export default function App() {
                 >
                   <div className="flex justify-between items-start mb-2">
                     <div className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${
-                      legend.rarity === 'epic' ? 'bg-purple-500/20 text-purple-400' : 'bg-cyan-500/20 text-cyan-400'
+                      legend.rarity === 'epic' ? 'bg-purple-500/20 text-purple-400' : 
+                      legend.rarity === 'rare' ? 'bg-blue-500/20 text-blue-400' :
+                      'bg-cyan-500/20 text-cyan-400'
                     }`}>
                       {legend.rarity}
                     </div>
                     {selectedLegend.id === legend.id && <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />}
                   </div>
                   <h3 className="text-xl font-black text-white uppercase mb-1 tracking-tighter font-display">{legend.name}</h3>
-                  <p className="text-[10px] text-cyan-100/50 leading-tight mb-4">{legend.description}</p>
-                  <div className="flex gap-4 text-[8px] font-bold text-cyan-900 uppercase">
-                    <span>Speed: {legend.speed}x</span>
-                    <span>System: {legend.specialAbility === 'overdrive' ? 'Burst' : 'CC'}</span>
+                  <p className="text-[10px] text-cyan-100/50 leading-tight mb-4 line-clamp-2 h-8">{legend.description}</p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-[8px] font-bold text-cyan-600 uppercase font-mono">
+                    <span>SPD: {legend.speed}x</span>
+                    <span>ABILITY: {legend.specialAbility}</span>
+                    <span>READY: {legend.abilityCooldown/1000}s</span>
                   </div>
                 </button>
               ))}
@@ -377,35 +627,42 @@ export default function App() {
               >
                 Weapon Customization
               </button>
+
+              <button
+                onClick={() => setShowFusionLab(true)}
+                className="w-full px-8 py-3 bg-purple-950/30 border border-purple-500/50 text-purple-400 text-sm font-bold rounded-sm hover:bg-purple-500/20 transition-all duration-300 uppercase tracking-widest shadow-[0_0_15px_rgba(168,85,247,0.2)]"
+              >
+                Relic Fusion Lab
+              </button>
             </div>
 
             {/* Elite Backers Section */}
-            <div className="w-full mb-16 font-accent">
+            <div className="w-full mb-32 font-accent">
               <h3 className="text-cyan-400 text-xs font-bold uppercase tracking-[0.4em] mb-12 flex items-center gap-4 justify-center font-display">
                 <div className="h-px bg-cyan-500/20 flex-1" />
-                Elite Backers
+                Strategic Deployment Support
                 <div className="h-px bg-cyan-500/20 flex-1" />
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
                 {[
-                  { name: 'Scout', price: '$5', features: ['Core System Access', 'Scout Insignia', 'Discord Role'], color: 'cyan' },
-                  { name: 'Knight', price: '$15', features: ['All Scout Perks', 'Weapon Skins Pack 1', 'Early Map Access'], color: 'purple' },
-                  { name: 'Legend', price: '$50', features: ['All Exclusive Content', 'Lifetime Season Pass', 'Developer Credits'], color: 'yellow' }
+                  { name: 'Scout Pack', price: '$5', features: ['Core System Access', 'Scout Insignia', 'Discord Role', 'Community Voting'], color: 'cyan' },
+                  { name: 'Knight Pack', price: '$15', features: ['All Scout Perks', 'Weapon Skins Pack 1', 'Early Map Access', 'Special Voice Lines'], color: 'purple' },
+                  { name: 'Legend Pack', price: '$50', features: ['All Exclusive Content', 'Lifetime Season Pass', 'Developer Credits', 'Custom Operator Skin'], color: 'yellow' }
                 ].map((tier) => (
                   <div 
                     key={tier.name}
-                    className="bg-black/60 border border-cyan-500/20 p-8 rounded-sm text-center group hover:scale-105 hover:bg-cyan-950/20 hover:border-cyan-400 transition-all duration-300 shadow-[0_0_20px_rgba(34,211,238,0.05)]"
+                    className="bg-black/60 border border-cyan-500/20 p-8 rounded-sm text-center group hover:scale-105 hover:bg-cyan-950/20 hover:border-cyan-400 transition-all duration-300 shadow-[0_0_20px_rgba(34,211,238,0.05)] flex flex-col h-full"
                   >
                     <h4 className="text-2xl font-black text-white uppercase mb-1 tracking-tighter font-display">{tier.name}</h4>
                     <p className="text-cyan-400 font-bold mb-6 text-lg font-display">{tier.price}</p>
-                    <ul className="text-[10px] text-cyan-100/50 space-y-3 mb-8 text-left">
+                    <ul className="text-[10px] text-cyan-100/50 space-y-3 mb-8 text-left flex-1">
                       {tier.features.map(f => (
                         <li key={f} className="flex items-center gap-2">
                           <div className="w-1 h-1 bg-cyan-500 rotate-45" /> {f}
                         </li>
                       ))}
                     </ul>
-                    <button className="w-full py-2 bg-transparent border border-cyan-400 text-cyan-400 text-[10px] font-black uppercase tracking-widest hover:bg-cyan-400 hover:text-black transition-all font-display">
+                    <button className="w-full py-3 bg-transparent border border-cyan-400 text-cyan-400 text-[10px] font-black uppercase tracking-widest hover:bg-cyan-400 hover:text-black transition-all font-display mt-auto">
                       Support Deployment
                     </button>
                   </div>
@@ -455,7 +712,26 @@ export default function App() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+              {/* Weapon Selection First */}
+              <div className="flex flex-col gap-4">
+                <h3 className="text-cyan-400 text-[10px] font-bold uppercase tracking-widest bg-cyan-900/20 p-2 border-l-2 border-cyan-400">Weapon Chassis</h3>
+                <div className="flex flex-col gap-2">
+                  {Object.values(WEAPONS).map((w) => (
+                    <button
+                      key={w.id}
+                      onClick={() => setWeapon(w)}
+                      className={`p-3 border text-left transition-all group ${
+                        selectedWeapon.id === w.id ? 'bg-cyan-500/20 border-cyan-400' : 'bg-black/40 border-cyan-900/30 hover:border-cyan-500/50'
+                      }`}
+                    >
+                      <div className="text-xs font-black text-white uppercase group-hover:text-cyan-400">{w.name}</div>
+                      <div className="text-[8px] text-cyan-100/40 uppercase mt-1">Mech: {w.type.replace('_', ' ')}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {(['scope', 'grip', 'barrel'] as AttachmentType[]).map((type) => (
                 <div key={type} className="flex flex-col gap-4">
                   <h3 className="text-cyan-400/50 text-xs font-bold uppercase tracking-[0.3em] mb-2">{type}</h3>
