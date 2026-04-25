@@ -12,7 +12,41 @@ import { soundManager } from './lib/sounds';
 export type GameState = 'menu' | 'playing' | 'gameover';
 export type EntityState = 'active' | 'disabled';
 
-export type EnemyType = 'scout' | 'tank' | 'sniper' | 'standard';
+export type EnemyType = 'scout' | 'tank' | 'sniper' | 'standard' | 'ghost';
+
+export interface LegendData {
+  id: string;
+  name: string;
+  description: string;
+  speed: number;
+  dashCooldown: number;
+  abilityCooldown: number;
+  specialAbility: 'emp' | 'overdrive';
+  rarity: 'common' | 'rare' | 'epic';
+}
+
+export const LEGENDS: LegendData[] = [
+  { 
+    id: 'titan', 
+    name: 'Titan', 
+    description: 'Heavy assault unit with tactical EMP suppression.', 
+    speed: 1, 
+    dashCooldown: 2000, 
+    abilityCooldown: 15000, 
+    specialAbility: 'emp',
+    rarity: 'common'
+  },
+  { 
+    id: 'stryker', 
+    name: 'Stryker', 
+    description: 'High-mobility skirmisher with Overdrive hyper-fire.', 
+    speed: 1.4, 
+    dashCooldown: 1200, 
+    abilityCooldown: 12000, 
+    specialAbility: 'overdrive',
+    rarity: 'epic'
+  }
+];
 
 export interface EnemyData {
   id: string;
@@ -79,7 +113,7 @@ export interface ObjectiveData {
 
 export interface HazardData {
   id: string;
-  type: 'laser' | 'gas';
+  type: 'laser' | 'gas' | 'disruptor';
   position: [number, number, number];
   size: [number, number, number];
   isActive: boolean;
@@ -159,6 +193,13 @@ interface GameStore {
     barrel: Attachment;
   };
   setAttachment: (type: AttachmentType, attachment: Attachment) => void;
+  zoomSensitivity: number;
+  setZoomSensitivity: (sensitivity: number) => void;
+
+  // Legends
+  selectedLegend: LegendData;
+  setSelectedLegend: (legend: LegendData) => void;
+  overdriveActiveUntil: number;
 
   startGame: () => void;
   endGame: () => void;
@@ -210,8 +251,8 @@ const INITIAL_ENEMIES: EnemyData[] = [
   { id: 'bot-2', position: [-40, 1, 40], state: 'active', disabledUntil: 0, type: 'tank', lastHitTime: 0 },
   { id: 'bot-3', position: [40, 1, -40], state: 'active', disabledUntil: 0, type: 'sniper', lastHitTime: 0 },
   { id: 'bot-4', position: [-40, 1, -40], state: 'active', disabledUntil: 0, type: 'standard', lastHitTime: 0 },
-  { id: 'bot-5', position: [0, 1, 60], state: 'active', disabledUntil: 0, type: 'scout', lastHitTime: 0 },
-  { id: 'bot-6', position: [0, 1, -60], state: 'active', disabledUntil: 0, type: 'standard', lastHitTime: 0 },
+  { id: 'bot-5', position: [0, 1, 60], state: 'active', disabledUntil: 0, type: 'ghost', lastHitTime: 0 },
+  { id: 'bot-6', position: [0, 1, -60], state: 'active', disabledUntil: 0, type: 'ghost', lastHitTime: 0 },
 ];
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -246,6 +287,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     { id: 'h-2', type: 'laser', position: [-20, 0, 0], size: [1, 5, 10], isActive: false, lastToggleTime: 0 },
     { id: 'h-3', type: 'gas', position: [0, 0, 30], size: [10, 2, 10], isActive: true, lastToggleTime: 0 },
     { id: 'h-4', type: 'gas', position: [0, 0, -30], size: [10, 2, 10], isActive: true, lastToggleTime: 0 },
+    { id: 'h-5', type: 'disruptor', position: [30, 0, -30], size: [4, 8, 4], isActive: true, lastToggleTime: 0 },
+    { id: 'h-6', type: 'disruptor', position: [-30, 0, 30], size: [4, 8, 4], isActive: true, lastToggleTime: 0 },
   ],
   
   socket: null,
@@ -257,9 +300,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
     barrel: ATTACHMENTS.barrel[0],
   },
 
+  zoomSensitivity: 0.5,
+
+  selectedLegend: LEGENDS[0],
+  setSelectedLegend: (selectedLegend) => set({ selectedLegend }),
+  overdriveActiveUntil: 0,
+
   setAttachment: (type, attachment) => set((state) => ({
     weaponAttachments: { ...state.weaponAttachments, [type]: attachment }
   })),
+
+  setZoomSensitivity: (zoomSensitivity) => set({ zoomSensitivity }),
 
   mobileInput: {
     move: { x: 0, y: 0 },
@@ -623,15 +674,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
   triggerDash: () => set((state) => {
     if (Date.now() < state.dashCooldown) return state;
     soundManager.play('dash', 0.4);
-    return { dashCooldown: Date.now() + 2000, dashReadyNotified: false };
+    return { dashCooldown: Date.now() + state.selectedLegend.dashCooldown, dashReadyNotified: false };
   }),
 
   triggerEMP: () => set((state) => {
     if (Date.now() < state.empCooldown) return state;
+    const now = Date.now();
+
+    if (state.selectedLegend.specialAbility === 'overdrive') {
+      soundManager.play('ready', 0.5);
+      return {
+        empCooldown: now + state.selectedLegend.abilityCooldown,
+        overdriveActiveUntil: now + 5000,
+        empReadyNotified: false,
+        events: [...state.events, { id: Math.random().toString(), message: "OVERDRIVE SYSTEM ENGAGED", timestamp: now }]
+      };
+    }
     
     soundManager.play('emp', 0.7);
     const empRange = 30;
-    const now = Date.now();
     const duration = 5000;
 
     const enemies = state.enemies.map(e => {
@@ -647,7 +708,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     return { 
       enemies, 
-      empCooldown: now + 15000, 
+      empCooldown: now + state.selectedLegend.abilityCooldown, 
       empActiveUntil: now + 500,
       empReadyNotified: false,
       events: [...state.events, { id: Math.random().toString(), message: "EMP BLAST ACTIVATED", timestamp: now }]

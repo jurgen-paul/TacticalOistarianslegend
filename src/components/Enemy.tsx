@@ -48,6 +48,8 @@ export function Enemy({ data }: { data: EnemyData }) {
         return { speed: 2, chaseDist: 25, shootDist: 20, cooldown: 4000, spread: 0.08, color: '#ff4400' };
       case 'sniper':
         return { speed: 1, chaseDist: 40, shootDist: 45, cooldown: 5000, spread: 0.01, color: '#00ff00' };
+      case 'ghost':
+        return { speed: 6, chaseDist: 20, shootDist: 6, cooldown: 800, spread: 0.4, color: '#aa00fb' };
       default:
         return { speed: 4, chaseDist: 20, shootDist: 18, cooldown: 3000, spread: 0.12, color: '#ff0000' };
     }
@@ -309,6 +311,7 @@ export function Enemy({ data }: { data: EnemyData }) {
         {data.type === 'tank' && <TankModel state={data.state} color={stats.color} lastHitTime={data.lastHitTime} />}
         {data.type === 'scout' && <ScoutModel state={data.state} color={stats.color} lastHitTime={data.lastHitTime} />}
         {data.type === 'sniper' && <SniperModel state={data.state} color={stats.color} lastHitTime={data.lastHitTime} />}
+        {data.type === 'ghost' && <GhostModel state={data.state} color={stats.color} lastHitTime={data.lastHitTime} />}
         {data.type === 'standard' && <StandardModel state={data.state} color={stats.color} lastHitTime={data.lastHitTime} />}
 
         {/* Drone ID Label */}
@@ -419,6 +422,34 @@ function SniperModel({ state, color, lastHitTime }: { state: EntityState, color:
       <mesh position={[0, 2.5, 1.4]}>
         <boxGeometry args={[0.1, 0.1, 0.1]} />
         <meshBasicMaterial color={state === 'disabled' ? '#000' : color} toneMapped={false} />
+      </mesh>
+    </>
+  );
+}
+
+function GhostModel({ state, color, lastHitTime }: { state: EntityState, color: string, lastHitTime: number }) {
+  const isFlashing = Date.now() - lastHitTime < 100;
+  const baseColor = state === 'disabled' ? '#1a1a1a' : '#0a0a20';
+
+  return (
+    <>
+      <mesh castShadow position={[0, 1.2, 0]} rotation={[0, 0, Math.PI / 4]}>
+        <boxGeometry args={[0.4, 1.2, 0.4]} />
+        <meshStandardMaterial 
+          color={isFlashing ? '#ffffff' : baseColor} 
+          roughness={0.1} 
+          metalness={1} 
+          transparent 
+          opacity={0.4} 
+        />
+      </mesh>
+      <mesh position={[0, 1.2, 0]}>
+        <sphereGeometry args={[0.25, 16, 16]} />
+        <meshBasicMaterial color={state === 'disabled' ? '#111' : color} toneMapped={false} />
+      </mesh>
+      <mesh position={[0, 1.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.5, 0.02, 16, 32]} />
+        <meshBasicMaterial color={color} toneMapped={false} transparent opacity={0.5} />
       </mesh>
     </>
   );

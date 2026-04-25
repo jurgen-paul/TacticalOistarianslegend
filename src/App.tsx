@@ -6,7 +6,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Game } from './components/Game';
 import { MobileControls } from './components/MobileControls';
-import { useGameStore, ATTACHMENTS, AttachmentType, Attachment } from './store';
+import { useGameStore, ATTACHMENTS, AttachmentType, Attachment, LEGENDS } from './store';
 import { Minimap } from './components/Minimap';
 import { getStrategicAdvice } from './lib/gemini';
 
@@ -25,6 +25,7 @@ function HUD() {
   const dashCooldown = useGameStore(state => state.dashCooldown);
   const empCooldown = useGameStore(state => state.empCooldown);
   const objectives = useGameStore(state => state.objectives);
+  const selectedLegend = useGameStore(state => state.selectedLegend);
 
   const [showHitMarker, setShowHitMarker] = useState(false);
   const [showDamageFlash, setShowDamageFlash] = useState(false);
@@ -196,20 +197,22 @@ function HUD() {
       {/* HUD Bottom Right - Abilities */}
       <div className="absolute bottom-4 right-4 flex gap-4 pointer-events-none">
         <div className="flex flex-col items-end gap-1">
-          <div className="text-[8px] text-cyan-500/50 font-bold uppercase tracking-widest">Dash [Shift]</div>
+          <div className="text-[8px] text-cyan-500/50 font-bold uppercase tracking-widest">Tactical Dash [Shift]</div>
           <div className="w-24 h-1 bg-cyan-900/30 rounded-full overflow-hidden border border-cyan-500/20">
             <div 
               className="h-full bg-cyan-400 transition-all duration-100" 
-              style={{ width: `${Math.max(0, Math.min(100, (1 - (Math.max(0, dashCooldown - Date.now()) / 2000)) * 100))}%` }} 
+              style={{ width: `${Math.max(0, Math.min(100, (1 - (Math.max(0, dashCooldown - Date.now()) / selectedLegend.dashCooldown)) * 100))}%` }} 
             />
           </div>
         </div>
         <div className="flex flex-col items-end gap-1">
-          <div className="text-[8px] text-cyan-500/50 font-bold uppercase tracking-widest">EMP Blast [E]</div>
+          <div className="text-[8px] text-cyan-500/50 font-bold uppercase tracking-widest">
+            {selectedLegend.specialAbility === 'overdrive' ? 'Hyper-Charge [E]' : 'EMP Blast [E]'}
+          </div>
           <div className="w-24 h-1 bg-cyan-900/30 rounded-full overflow-hidden border border-cyan-500/20">
             <div 
-              className="h-full bg-cyan-400 transition-all duration-100" 
-              style={{ width: `${Math.max(0, Math.min(100, (1 - (Math.max(0, empCooldown - Date.now()) / 15000)) * 100))}%` }} 
+              className={`h-full transition-all duration-100 ${selectedLegend.specialAbility === 'overdrive' ? 'bg-purple-500' : 'bg-cyan-400'}`} 
+              style={{ width: `${Math.max(0, Math.min(100, (1 - (Math.max(0, empCooldown - Date.now()) / selectedLegend.abilityCooldown)) * 100))}%` }} 
             />
           </div>
         </div>
@@ -269,6 +272,8 @@ export default function App() {
   const startGame = useGameStore(state => state.startGame);
   const weaponAttachments = useGameStore(state => state.weaponAttachments);
   const setAttachment = useGameStore(state => state.setAttachment);
+  const selectedLegend = useGameStore(state => state.selectedLegend);
+  const setSelectedLegend = useGameStore(state => state.setSelectedLegend);
   const isMobile = useIsMobile();
   const [showCustomization, setShowCustomization] = useState(false);
   const [aiAdvice, setAiAdvice] = useState<string | null>(null);
@@ -294,46 +299,123 @@ export default function App() {
       {/* Menus */}
       {gameState === 'menu' && (
         <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center z-10 pointer-events-auto">
-          <div className="mb-8 flex flex-col items-center">
-            <div className="text-cyan-500 text-xs tracking-[0.5em] font-bold mb-2 animate-pulse">SYSTEM STATUS: READY</div>
-            <h1 className="text-6xl md:text-8xl font-black text-white mb-2 drop-shadow-[0_0_30px_rgba(255,255,255,0.3)] tracking-tighter">
-              TACTICAL <span className="text-cyan-400">LEGENDS</span>
-            </h1>
-            <div className="text-cyan-400/50 text-sm tracking-widest font-bold">RISE OF OISTARIAN</div>
-          </div>
-
-          <div className="bg-cyan-950/20 border border-cyan-500/30 p-6 rounded-lg backdrop-blur-md max-w-md w-full mb-8 text-center">
-            <div className="text-cyan-400 text-xs font-bold mb-4 uppercase tracking-widest border-b border-cyan-500/30 pb-2">Mission Briefing</div>
-            <p className="text-cyan-100/70 text-sm leading-relaxed mb-4">
-              Welcome, Commander. You are now connected to the <span className="text-cyan-400 font-bold">NEXUS ONE</span> command network. 
-              Deploy your tactical legend into the Oistarian battlefield.
-            </p>
-            <div className="flex justify-center gap-8 text-[10px] text-cyan-500/50 font-bold uppercase tracking-tighter">
-              <span>Movement: WASD</span>
-              <span>Combat: MOUSE1</span>
-              <span>Tactical: SHIFT</span>
+          <div className="flex flex-col items-center w-full max-w-4xl max-h-[85vh] overflow-y-auto px-4 py-8 custom-scrollbar">
+            <div className="mb-12 flex flex-col items-center">
+              <div className="text-cyan-500 text-xs tracking-[0.5em] font-bold mb-2 animate-pulse">SYSTEM STATUS: READY</div>
+              <h1 className="text-6xl md:text-8xl font-black text-white mb-2 drop-shadow-[0_0_30px_rgba(255,255,255,0.3)] tracking-tighter text-center font-display">
+                TACTICAL <span className="text-cyan-400">LEGENDS</span>
+              </h1>
+              <div className="text-cyan-400/50 text-sm tracking-widest font-bold font-accent">RISE OF OISTARIAN</div>
             </div>
-          </div>
 
-          <div className="flex flex-col gap-6 w-80">
-            <button
-              onClick={() => startGame()}
-              className="w-full px-8 py-4 bg-cyan-500/10 border-2 border-cyan-400 text-cyan-400 text-xl font-bold rounded-sm hover:bg-cyan-400 hover:text-black transition-all duration-300 shadow-[0_0_20px_rgba(34,211,238,0.3)] group relative overflow-hidden"
-            >
-              <span className="relative z-10">INITIALIZE DEPLOYMENT</span>
-              <div className="absolute inset-0 bg-cyan-400 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-            </button>
+            {/* Mission Trailer Section */}
+            <div className="w-full mb-16">
+              <h3 className="text-cyan-400 text-xs font-bold uppercase tracking-[0.4em] mb-6 flex items-center gap-4 justify-center font-display">
+                <div className="h-px bg-cyan-500/20 flex-1" />
+                Mission Preview
+                <div className="h-px bg-cyan-500/20 flex-1" />
+              </h3>
+              <div className="aspect-video w-full bg-black border-2 border-cyan-500/30 rounded-sm overflow-hidden shadow-[0_0_30px_rgba(34,211,238,0.1)] relative group">
+                <iframe 
+                  className="w-full h-full opacity-80 group-hover:opacity-100 transition-opacity duration-500"
+                  src="https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1&mute=1&loop=1&playlist=dQw4w9WgXcQ&controls=0&modestbranding=1" 
+                  title="Tactical Legends Trailer"
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                />
+                <div className="absolute inset-0 pointer-events-none border-[12px] border-black/50" />
+                <div className="absolute top-4 left-4 bg-cyan-500/20 backdrop-blur-md border border-cyan-400/30 px-2 py-1 text-[8px] text-cyan-400 font-bold uppercase tracking-widest">
+                  Live Feed: Sector 7
+                </div>
+              </div>
+            </div>
 
-            <button
-              onClick={() => setShowCustomization(true)}
-              className="w-full px-8 py-3 bg-cyan-950/30 border border-cyan-500/50 text-cyan-400 text-sm font-bold rounded-sm hover:bg-cyan-500/20 transition-all duration-300 uppercase tracking-widest"
-            >
-              Weapon Customization
-            </button>
-          </div>
-          
-          <div className="mt-12 text-[10px] text-cyan-900 font-bold tracking-[0.3em] uppercase">
-            Powered by NEXUS ONE Intelligence
+            {/* Legend Selection */}
+            <h3 className="text-cyan-500/30 text-[10px] font-bold uppercase tracking-[0.5em] mb-6 font-display">Select Tactical Operator</h3>
+            <div className="flex flex-col md:flex-row gap-4 mb-16 w-full max-w-2xl">
+              {LEGENDS.map((legend: any) => (
+                <button
+                  key={legend.id}
+                  onClick={() => setSelectedLegend(legend)}
+                  className={`flex-1 p-4 border transition-all duration-300 rounded-sm text-left relative group ${
+                    selectedLegend.id === legend.id 
+                      ? 'bg-cyan-500/20 border-cyan-400 shadow-[0_0_30px_rgba(34,211,238,0.2)]' 
+                      : 'bg-black/40 border-cyan-900/30 hover:border-cyan-500/50'
+                  }`}
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${
+                      legend.rarity === 'epic' ? 'bg-purple-500/20 text-purple-400' : 'bg-cyan-500/20 text-cyan-400'
+                    }`}>
+                      {legend.rarity}
+                    </div>
+                    {selectedLegend.id === legend.id && <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />}
+                  </div>
+                  <h3 className="text-xl font-black text-white uppercase mb-1 tracking-tighter font-display">{legend.name}</h3>
+                  <p className="text-[10px] text-cyan-100/50 leading-tight mb-4">{legend.description}</p>
+                  <div className="flex gap-4 text-[8px] font-bold text-cyan-900 uppercase">
+                    <span>Speed: {legend.speed}x</span>
+                    <span>System: {legend.specialAbility === 'overdrive' ? 'Burst' : 'CC'}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Main Actions */}
+            <div className="flex flex-col gap-6 w-80 mb-20 font-accent">
+              <button
+                onClick={() => startGame()}
+                className="w-full px-8 py-4 bg-cyan-500/10 border-2 border-cyan-400 text-cyan-400 text-xl font-bold rounded-sm hover:bg-cyan-400 hover:text-black transition-all duration-300 shadow-[0_0_20px_rgba(34,211,238,0.3)] group relative overflow-hidden font-display"
+              >
+                <span className="relative z-10">INITIALIZE DEPLOYMENT</span>
+                <div className="absolute inset-0 bg-cyan-400 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+              </button>
+
+              <button
+                onClick={() => setShowCustomization(true)}
+                className="w-full px-8 py-3 bg-cyan-950/30 border border-cyan-500/50 text-cyan-400 text-sm font-bold rounded-sm hover:bg-cyan-500/20 transition-all duration-300 uppercase tracking-widest"
+              >
+                Weapon Customization
+              </button>
+            </div>
+
+            {/* Elite Backers Section */}
+            <div className="w-full mb-16 font-accent">
+              <h3 className="text-cyan-400 text-xs font-bold uppercase tracking-[0.4em] mb-12 flex items-center gap-4 justify-center font-display">
+                <div className="h-px bg-cyan-500/20 flex-1" />
+                Elite Backers
+                <div className="h-px bg-cyan-500/20 flex-1" />
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
+                {[
+                  { name: 'Scout', price: '$5', features: ['Core System Access', 'Scout Insignia', 'Discord Role'], color: 'cyan' },
+                  { name: 'Knight', price: '$15', features: ['All Scout Perks', 'Weapon Skins Pack 1', 'Early Map Access'], color: 'purple' },
+                  { name: 'Legend', price: '$50', features: ['All Exclusive Content', 'Lifetime Season Pass', 'Developer Credits'], color: 'yellow' }
+                ].map((tier) => (
+                  <div 
+                    key={tier.name}
+                    className="bg-black/60 border border-cyan-500/20 p-8 rounded-sm text-center group hover:scale-105 hover:bg-cyan-950/20 hover:border-cyan-400 transition-all duration-300 shadow-[0_0_20px_rgba(34,211,238,0.05)]"
+                  >
+                    <h4 className="text-2xl font-black text-white uppercase mb-1 tracking-tighter font-display">{tier.name}</h4>
+                    <p className="text-cyan-400 font-bold mb-6 text-lg font-display">{tier.price}</p>
+                    <ul className="text-[10px] text-cyan-100/50 space-y-3 mb-8 text-left">
+                      {tier.features.map(f => (
+                        <li key={f} className="flex items-center gap-2">
+                          <div className="w-1 h-1 bg-cyan-500 rotate-45" /> {f}
+                        </li>
+                      ))}
+                    </ul>
+                    <button className="w-full py-2 bg-transparent border border-cyan-400 text-cyan-400 text-[10px] font-black uppercase tracking-widest hover:bg-cyan-400 hover:text-black transition-all font-display">
+                      Support Deployment
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <div className="pb-12 text-[10px] text-cyan-900 font-bold tracking-[0.3em] uppercase">
+              Powered by NEXUS ONE Intelligence
+            </div>
           </div>
         </div>
       )}
@@ -415,6 +497,34 @@ export default function App() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Settings Section */}
+            <div className="mt-8 pt-8 border-t border-cyan-500/20">
+              <h3 className="text-cyan-400 text-xs font-bold uppercase tracking-widest mb-6 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-cyan-400" />
+                SENSITIVITY CALIBRATION
+              </h3>
+              <div className="flex flex-col gap-4 max-w-md">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-[10px] text-cyan-100/50 uppercase tracking-widest font-bold">Zoom Sensitivity</span>
+                  <span className="text-cyan-400 font-mono font-bold text-xs">{(useGameStore(state => state.zoomSensitivity) * 100).toFixed(0)}%</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="0.1" 
+                  max="2.0" 
+                  step="0.05"
+                  value={useGameStore(state => state.zoomSensitivity)}
+                  onChange={(e) => useGameStore.getState().setZoomSensitivity(parseFloat(e.target.value))}
+                  className="w-full appearance-none bg-cyan-950 h-1.5 rounded-full outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-cyan-400 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(34,211,238,0.5)] border border-cyan-500/20"
+                />
+                <div className="flex justify-between text-[8px] text-cyan-900 font-bold uppercase">
+                  <span>Slow</span>
+                  <span>Standard</span>
+                  <span>Fast</span>
+                </div>
+              </div>
             </div>
 
             {/* AI Advisor Section */}

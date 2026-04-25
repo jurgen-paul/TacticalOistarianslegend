@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { RigidBody, RapierRigidBody, useRapier, CapsuleCollider } from '@react-three/rapier';
 import { PointerLockControls } from '@react-three/drei';
@@ -29,12 +29,16 @@ export function Player() {
   const dashCooldown = useGameStore(state => state.dashCooldown);
   const empCooldown = useGameStore(state => state.empCooldown);
   const weaponAttachments = useGameStore(state => state.weaponAttachments);
+  const zoomSensitivity = useGameStore(state => state.zoomSensitivity);
+  const selectedLegend = useGameStore(state => state.selectedLegend);
+  const overdriveActiveUntil = useGameStore(state => state.overdriveActiveUntil);
 
   const keys = useRef({ 
     w: false, a: false, s: false, d: false,
     arrowup: false, arrowdown: false, arrowleft: false, arrowright: false,
     shift: false, e: false
   });
+  const [adsActive, setAdsActive] = useState(false);
   const isAiming = useRef(false);
   const lastEmitTime = useRef(0);
   const lastShootTime = useRef(0);
@@ -70,11 +74,13 @@ export function Player() {
     const handleMouseDown = (e: MouseEvent) => {
       if (e.button === 2) { // Right click
         isAiming.current = true;
+        setAdsActive(true);
       }
     };
     const handleMouseUp = (e: MouseEvent) => {
       if (e.button === 2) {
         isAiming.current = false;
+        setAdsActive(false);
       }
     };
     window.addEventListener('mousedown', handleMouseDown);
@@ -99,7 +105,8 @@ export function Player() {
     const now = Date.now();
     const baseFireRate = 200;
     const fireRateBoost = weaponAttachments.barrel.stats.fireRateBoost || 0;
-    const fireRate = baseFireRate * (1 - fireRateBoost);
+    const overdriveBoost = now < overdriveActiveUntil ? 0.4 : 0;
+    const fireRate = baseFireRate * (1 - fireRateBoost - overdriveBoost);
     
     if (now - lastShootTime.current < fireRate) return;
     lastShootTime.current = now;
@@ -260,7 +267,7 @@ export function Player() {
     if (direction.lengthSq() > 0) {
       // Clamp length to 1 to prevent faster diagonal movement if both inputs active (though rare)
       if (direction.lengthSq() > 1) direction.normalize();
-      direction.multiplyScalar(SPEED);
+      direction.multiplyScalar(SPEED * selectedLegend.speed);
     }
 
     body.current.setLinvel({ x: direction.x, y: velocity.y, z: direction.z }, true);
@@ -268,7 +275,10 @@ export function Player() {
     // Update hover sound volume based on speed
     if (hoverSoundRef.current) {
       const speed = direction.length();
-      hoverSoundRef.current.volume = THREE.MathUtils.lerp(hoverSoundRef.current.volume, speed > 0.1 ? 0.15 : 0.05, delta * 5);
+      const targetVolume = speed > 0.1 ? 0.15 : 0.05;
+      const lerpAlpha = Math.min(1, delta * 5);
+      const newVolume = THREE.MathUtils.lerp(hoverSoundRef.current.volume, targetVolume, lerpAlpha);
+      hoverSoundRef.current.volume = Math.max(0, Math.min(1, newVolume));
     }
 
     // Mobile Look Rotation
@@ -374,7 +384,7 @@ export function Player() {
 
   return (
     <>
-      {!isTouchDevice.current && <PointerLockControls />}
+      {!isTouchDevice.current && <PointerLockControls pointerSpeed={adsActive ? zoomSensitivity : 1.0} />}
       <RigidBody
         ref={body}
         colliders={false}
@@ -399,7 +409,10 @@ export function Player() {
           {/* Power Core */}
           <mesh position={[0, 0.05, 0.1]}>
             <boxGeometry args={[0.08, 0.08, 0.2]} />
-            <meshBasicMaterial color="#00ffff" toneMapped={false} />
+            <meshBasicMaterial 
+              color={Date.now() < overdriveActiveUntil ? "#ff00ff" : "#00ffff"} 
+              toneMapped={false} 
+            />
           </mesh>
           {/* Dual Barrels */}
           <mesh position={[-0.03, 0.02, -0.2]} rotation={[Math.PI / 2, 0, 0]}>

@@ -20,6 +20,9 @@ function Hazard({ data }: { data: any }) {
   if (data.type === 'laser') {
     return <LaserGrid data={data} />;
   }
+  if (data.type === 'disruptor') {
+    return <DisruptorPillar data={data} />;
+  }
   return <ToxicGas data={data} />;
 }
 
@@ -204,6 +207,65 @@ function ToxicGas({ data }: { data: any }) {
           </mesh>
         ))}
       </group>
+    </group>
+  );
+}
+
+function DisruptorPillar({ data }: { data: any }) {
+  const ringRef1 = useRef<THREE.Mesh>(null);
+  const ringRef2 = useRef<THREE.Mesh>(null);
+  const beamRef = useRef<THREE.Mesh>(null);
+
+  useFrame((state) => {
+    const t = state.clock.getElapsedTime();
+    if (ringRef1.current) {
+      ringRef1.current.rotation.y = t * 2;
+      ringRef1.current.rotation.z = Math.sin(t) * 0.5;
+    }
+    if (ringRef2.current) {
+      ringRef2.current.rotation.y = -t * 1.5;
+      ringRef2.current.rotation.x = Math.cos(t) * 0.5;
+    }
+    if (beamRef.current) {
+      const mat = beamRef.current.material as THREE.MeshBasicMaterial;
+      mat.opacity = 0.4 + Math.sin(t * 10) * 0.2;
+      beamRef.current.scale.set(
+        1 + Math.sin(t * 20) * 0.1,
+        1,
+        1 + Math.sin(t * 20) * 0.1
+      );
+    }
+  });
+
+  return (
+    <group position={data.position}>
+      {/* Pillar Core */}
+      <mesh position={[0, data.size[1] / 2, 0]}>
+        <cylinderGeometry args={[0.5, 0.8, data.size[1], 8]} />
+        <meshStandardMaterial color="#111" metalness={0.9} roughness={0.1} />
+      </mesh>
+      
+      {/* Energy Beam */}
+      <mesh ref={beamRef} position={[0, data.size[1] / 2, 0]}>
+        <cylinderGeometry args={[0.2, 0.2, data.size[1] + 1, 8]} />
+        <meshBasicMaterial color="#00ffff" transparent opacity={0.5} toneMapped={false} />
+      </mesh>
+      
+      {/* Rotating Induction Rings */}
+      <mesh ref={ringRef1} position={[0, data.size[1] * 0.8, 0]}>
+        <torusGeometry args={[1.5, 0.1, 16, 32]} />
+        <meshStandardMaterial color="#333" metalness={1} />
+      </mesh>
+      <mesh ref={ringRef2} position={[0, data.size[1] * 0.4, 0]}>
+        <torusGeometry args={[2, 0.1, 16, 32]} />
+        <meshStandardMaterial color="#333" metalness={1} />
+      </mesh>
+      
+      {/* Ground Base */}
+      <mesh position={[0, 0.25, 0]}>
+        <cylinderGeometry args={[2, 2.5, 0.5, 8]} />
+        <meshStandardMaterial color="#222" metalness={0.8} />
+      </mesh>
     </group>
   );
 }

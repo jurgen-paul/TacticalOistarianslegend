@@ -46,7 +46,8 @@ class SoundManager {
     if (sound) {
       // For overlapping sounds like shooting, we clone the node
       const s = sound.cloneNode() as HTMLAudioElement;
-      s.volume = volume;
+      // Clamp volume between 0 and 1 to prevent IndexSizeError
+      s.volume = Math.max(0, Math.min(1, volume));
       s.loop = loop;
       s.play().catch(() => {
         // Ignore play errors (usually due to user interaction requirement)
