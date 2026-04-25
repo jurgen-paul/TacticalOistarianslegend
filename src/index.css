@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  @keyframes scan {
+    from { transform: translateY(-100%); }
+    to { transform: translateY(200%); }
+  }
+}
+
+@utility animate-scan {
+  animation: scan 4s linear infinite;
+}
