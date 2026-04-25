@@ -8,7 +8,7 @@ import { Grid, Stars, Float } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef, useState, useEffect } from 'react';
 import * as THREE from 'three';
-import { ENEMY_SPAWN_POINTS } from '../store';
+import { ENEMY_SPAWN_POINTS, useGameStore } from '../store';
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(() => {
@@ -106,6 +106,7 @@ export function Arena() {
         </mesh>
       </RigidBody>
       <Grid position={[0, -0.49, 0]} args={[200, 200]} cellColor="#00ffff" sectionColor="#ffffff" fadeDistance={100} cellThickness={0.2} sectionThickness={1.0} />
+      <ResonanceGrid />
 
       {/* Spawn Points Visualization */}
       {ENEMY_SPAWN_POINTS.map((sp) => (
@@ -209,6 +210,62 @@ function Wall({ name, position, rotation, isMobile }: { name: string, position: 
       {/* Scanning Line */}
       <ScanningLine />
     </RigidBody>
+  );
+}
+
+function ResonanceGrid() {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const materialRef = useRef<THREE.ShaderMaterial>(null);
+  const resonanceUnlocked = useGameStore(state => state.currentMission?.resonanceUnlocked);
+
+  useFrame((state) => {
+    if (materialRef.current) {
+      materialRef.current.uniforms.uTime.value = state.clock.elapsedTime;
+      materialRef.current.uniforms.uResonance.value = resonanceUnlocked ? 1.0 : 0.0;
+    }
+  });
+
+  const uniforms = useMemo(() => ({
+    uTime: { value: 0 },
+    uResonance: { value: 0 }
+  }), []);
+
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.48, 0]}>
+      <planeGeometry args={[200, 200]} />
+      <shaderMaterial
+        ref={materialRef}
+        transparent
+        uniforms={uniforms}
+        vertexShader={`
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `}
+        fragmentShader={`
+          uniform float uTime;
+          uniform float uResonance;
+          varying vec2 vUv;
+          
+          void main() {
+            vec2 grid = fract(vUv * 50.0);
+            float line = smoothstep(0.0, 0.05, grid.x) * smoothstep(1.0, 0.95, grid.x) *
+                         smoothstep(0.0, 0.05, grid.y) * smoothstep(1.0, 0.95, grid.y);
+            
+            float pulse = 0.0;
+            if (uResonance > 0.5) {
+              float dist = distance(vUv, vec2(0.5));
+              pulse = smoothstep(0.2, 0.0, abs(dist - fract(uTime * 0.5) * 1.5)) * 0.5;
+            }
+            
+            vec3 color = mix(vec3(0.0, 1.0, 1.0), vec3(1.0, 0.0, 1.0), pulse);
+            gl_FragColor = vec4(color, (1.0 - line) * 0.2 + pulse * 0.3);
+          }
+        `}
+      />
+    </mesh>
   );
 }
 

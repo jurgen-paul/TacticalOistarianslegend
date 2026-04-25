@@ -8,6 +8,7 @@ import { Game } from './components/Game';
 import { MobileControls } from './components/MobileControls';
 import { useGameStore, ATTACHMENTS, AttachmentType, Attachment, LEGENDS, WEAPONS } from './store';
 import { Relic } from './services/fusionEngine';
+import { RelicCodex } from './components/RelicCodex';
 import { Minimap } from './components/Minimap';
 import { getStrategicAdvice } from './lib/gemini';
 
@@ -35,6 +36,9 @@ function HUD() {
   const selectedWeapon = useGameStore(state => state.selectedWeapon);
   const plasmaCharge = useGameStore(state => state.plasmaCharge);
 
+  const playerHealth = useGameStore(state => state.playerHealth);
+  const playerMaxHealth = useGameStore(state => state.playerMaxHealth);
+
   const [showHitMarker, setShowHitMarker] = useState(false);
   const [showDamageFlash, setShowDamageFlash] = useState(false);
 
@@ -53,6 +57,18 @@ function HUD() {
       return () => clearTimeout(timer);
     }
   }, [lastDamageTime]);
+
+  useEffect(() => {
+    if (gameState === 'playing' && currentMission?.id === 'eden_surge') {
+      const dialogueTimer = setTimeout(() => {
+        useGameStore.getState().addVoiceLine("OISTARIAN", "This place remembers more than it should.");
+        setTimeout(() => {
+          useGameStore.getState().addVoiceLine("ECHO VANGUARD", "I feel the pulse... It's reacting to us.");
+        }, 3000);
+      }, 5000);
+      return () => clearTimeout(dialogueTimer);
+    }
+  }, [gameState, currentMission]);
 
   const leaderboard = useMemo(() => {
     const players = [
@@ -86,6 +102,50 @@ function HUD() {
       <div className={`absolute inset-0 bg-red-500/20 pointer-events-none transition-opacity duration-200 ${showDamageFlash ? 'opacity-100' : 'opacity-0'}`} />
 
       {/* Crosshair */}
+      {/* HUD Right - Status & Inventory */}
+      <div className="absolute top-4 right-4 flex flex-col gap-4 pointer-events-none items-end">
+        <div className="bg-black/40 border-r-2 border-cyan-400 p-3 backdrop-blur-sm w-64 text-right">
+          <div className="text-cyan-400/50 text-[10px] font-black uppercase tracking-[0.2em] mb-3">Neural Link Status</div>
+          
+          <div className="flex flex-col gap-3">
+            {/* Trust Meter */}
+            <div className="flex flex-col gap-1">
+              <div className="flex justify-between text-[8px] font-bold uppercase">
+                <span className="text-cyan-700">Team Trust</span>
+                <span className={trustScore < 60 ? 'text-red-400 animate-pulse' : 'text-cyan-400'}>{trustScore}%</span>
+              </div>
+              <div className="h-1.5 w-full bg-cyan-950/40 rounded-full overflow-hidden border border-cyan-500/10">
+                <div 
+                  className={`h-full transition-all duration-500 ${trustScore < 60 ? 'bg-red-500' : 'bg-cyan-500 shadow-[0_0_8px_rgba(34,211,238,0.5)]'}`}
+                  style={{ width: `${trustScore}%` }} 
+                />
+              </div>
+            </div>
+
+            {/* Morality Meter */}
+            <div className="flex flex-col gap-1">
+              <div className="flex justify-between text-[8px] font-bold uppercase">
+                <span className="text-cyan-700">Tactical Morality</span>
+                <span className="text-cyan-400">{moralityScore}%</span>
+              </div>
+              <div className="h-1.5 w-full bg-cyan-950/40 rounded-full overflow-hidden border border-cyan-500/10">
+                <div 
+                  className="h-full bg-white/40 transition-all duration-500 shadow-[0_0_5px_rgba(255,255,255,0.3)]"
+                  style={{ width: `${moralityScore}%` }} 
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-cyan-900/30 flex justify-between items-center">
+            <div className="text-[8px] font-black text-cyan-600 uppercase">Resonance</div>
+            <div className={`text-[9px] font-bold uppercase ${currentMission?.resonanceUnlocked ? 'text-green-400' : 'text-cyan-900'}`}>
+              {currentMission?.resonanceUnlocked ? 'SURGE ACTIVE' : 'LOCKED'}
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex flex-col items-center">
         <div className="relative">
           <div className={`w-8 h-8 border border-cyan-500/30 rounded-full flex items-center justify-center ${playerState === 'disabled' ? 'border-red-500' : ''}`}>
@@ -110,10 +170,28 @@ function HUD() {
       <div className="absolute top-4 left-4 flex flex-col gap-4 pointer-events-none">
         <Minimap />
         
-        <div className="bg-black/40 border-l-2 border-cyan-500 p-2 backdrop-blur-sm">
-          <div className="text-cyan-500/50 text-[10px] font-bold tracking-widest uppercase mb-1">Combat Efficiency</div>
-          <div className="text-cyan-400 text-2xl font-black tabular-nums drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
-            {score.toString().padStart(5, '0')}
+        <div className="flex gap-2">
+          <div className="bg-black/40 border-l-2 border-cyan-500 p-2 backdrop-blur-sm">
+            <div className="text-cyan-500/50 text-[10px] font-bold tracking-widest uppercase mb-1">Efficiency</div>
+            <div className="text-cyan-400 text-2xl font-black tabular-nums drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
+              {score.toString().padStart(5, '0')}
+            </div>
+          </div>
+
+          <div className="bg-black/40 border-l-2 border-red-500 p-2 backdrop-blur-sm flex-1 min-w-[120px]">
+             <div className="text-red-500/50 text-[10px] font-bold tracking-widest uppercase mb-1 flex justify-between">
+                <span>Vitality</span>
+                <span>{playerHealth} / {playerMaxHealth}</span>
+             </div>
+             <div className="h-6 w-full bg-red-950/20 relative overflow-hidden border border-red-500/10">
+                <div 
+                  className={`h-full transition-all duration-300 ${playerHealth / playerMaxHealth > 0.3 ? 'bg-red-500' : 'bg-red-600 animate-pulse'}`}
+                  style={{ width: `${(playerHealth / playerMaxHealth) * 100}%` }}
+                />
+                <div className="absolute inset-0 flex items-center justify-center">
+                   <div className="w-full h-[1px] bg-white/5" />
+                </div>
+             </div>
           </div>
         </div>
         
@@ -392,6 +470,9 @@ export default function App() {
     setIsConsulting(false);
   };
 
+  const [rarityFilter, setRarityFilter] = useState<'platinum' | 'silver'>('platinum');
+  const filteredLegends = useMemo(() => LEGENDS.filter(l => l.rarity === rarityFilter), [rarityFilter]);
+
   return (
     <div className="w-screen h-screen bg-black relative overflow-hidden font-mono select-none">
       {/* 3D Canvas */}
@@ -408,8 +489,8 @@ export default function App() {
           <div className="w-full max-w-6xl flex flex-col items-center">
             <div className="flex justify-between w-full items-center mb-12 border-b border-cyan-500/20 pb-4">
               <div>
-                <h2 className="text-4xl font-black text-white font-display tracking-tighter">RELIC <span className="text-cyan-400">FUSION LAB</span></h2>
-                <p className="text-cyan-500/50 text-[10px] font-bold uppercase tracking-widest">NEXUS ONE TRANSFORMATION ENGINE</p>
+                <h2 className="text-4xl font-black text-white font-display tracking-tighter">RELIC <span className="text-cyan-400">COMMAND</span></h2>
+                <p className="text-cyan-500/50 text-[10px] font-bold uppercase tracking-widest">NEXUS ONE ARCHIVE ENGINE</p>
               </div>
               <button 
                 onClick={() => setShowFusionLab(false)}
@@ -419,128 +500,7 @@ export default function App() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full">
-              {/* Inventory */}
-              <div className="lg:col-span-2 flex flex-col gap-6">
-                <h3 className="text-cyan-400 text-xs font-bold uppercase tracking-widest mb-2 flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full" />
-                  Active Inventory
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {relics.map(relic => (
-                    <button
-                      key={relic.id}
-                      disabled={selectedRelicA === relic.id || selectedRelicB === relic.id}
-                      onClick={() => {
-                        if (!selectedRelicA) setSelectedRelicA(relic.id);
-                        else if (!selectedRelicB) setSelectedRelicB(relic.id);
-                      }}
-                      className={`p-4 border text-left transition-all relative ${
-                        selectedRelicA === relic.id || selectedRelicB === relic.id
-                          ? 'border-cyan-400 bg-cyan-900/40 opacity-50'
-                          : 'border-cyan-900/30 bg-black/40 hover:border-cyan-500/50'
-                      }`}
-                    >
-                      <div className="flex justify-between items-center mb-2">
-                        <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                          relic.tier === 1 ? 'bg-cyan-500/20 text-cyan-400' :
-                          relic.tier === 2 ? 'bg-green-500/20 text-green-400' :
-                          relic.tier === 3 ? 'bg-blue-500/20 text-blue-400' :
-                          relic.tier === 4 ? 'bg-purple-500/20 text-purple-400' :
-                          'bg-yellow-500/20 text-yellow-400'
-                        }`}>
-                          {relic.tier === 1 ? 'COMMON' :
-                           relic.tier === 2 ? 'UNCOMMON' :
-                           relic.tier === 3 ? 'RARE' :
-                           relic.tier === 4 ? 'EPIC' : 'LEGENDARY'}
-                        </span>
-                        <span className="text-[10px] text-white/50 font-mono">#{relic.id.slice(-4)}</span>
-                      </div>
-                      <div className="text-lg font-bold text-white uppercase font-display border-b border-white/5 pb-2 mb-2 group-hover:text-cyan-400 transition-colors">{relic.name}</div>
-                      <div className="flex flex-wrap gap-1 mb-4">
-                        {relic.traits.map(t => (
-                          <span key={t} className="text-[8px] border border-cyan-500/20 px-1 text-cyan-100/50 uppercase">{t}</span>
-                        ))}
-                      </div>
-                      <div className="flex justify-between items-end">
-                        <div className="text-sm font-black text-cyan-400 font-mono">PWR: {relic.powerLevel}</div>
-                        {relic.glyphArtifact && <div className="text-cyan-500/30 text-xs font-black">{relic.glyphArtifact}</div>}
-                      </div>
-                    </button>
-                  ))}
-                  {relics.length === 0 && (
-                    <div className="col-span-full py-20 text-center border border-dashed border-cyan-900/30">
-                      <p className="text-cyan-900 text-sm uppercase tracking-widest font-black">Inventory Empty</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Fusion Chamber */}
-              <div className="flex flex-col gap-8">
-                <div className="bg-cyan-950/20 border-2 border-cyan-400/30 p-8 rounded-sm relative overflow-hidden">
-                  <div className="absolute top-0 left-0 w-full h-1 bg-cyan-400/50 animate-scan" />
-                  <h3 className="text-center text-white font-black uppercase mb-8 tracking-widest font-display">Fusion Chamber</h3>
-                  
-                  <div className="flex flex-col items-center gap-6 mb-8">
-                    <div className={`w-16 h-16 border-2 flex items-center justify-center relative ${selectedRelicA ? 'border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.3)]' : 'border-dashed border-cyan-900/50'}`}>
-                      {selectedRelicA ? (
-                        <button onClick={() => setSelectedRelicA(null)} className="text-xs font-black text-cyan-400">A</button>
-                      ) : (
-                        <div className="text-cyan-900 text-xs text-center leading-tight">CHAMBER<br/>[A]</div>
-                      )}
-                    </div>
-                    <div className="text-cyan-400 font-black text-xl">
-                      <div className="animate-pulse">☍</div>
-                    </div>
-                    <div className={`w-16 h-16 border-2 flex items-center justify-center relative ${selectedRelicB ? 'border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.3)]' : 'border-dashed border-cyan-900/50'}`}>
-                      {selectedRelicB ? (
-                        <button onClick={() => setSelectedRelicB(null)} className="text-xs font-black text-cyan-400">B</button>
-                      ) : (
-                        <div className="text-cyan-900 text-xs text-center leading-tight">CHAMBER<br/>[B]</div>
-                      )}
-                    </div>
-                  </div>
-
-                  <button
-                    disabled={!selectedRelicA || !selectedRelicB}
-                    onClick={handleFusion}
-                    className={`w-full py-4 font-black uppercase tracking-widest transition-all ${
-                      selectedRelicA && selectedRelicB
-                        ? 'bg-cyan-400 text-black hover:bg-white shadow-[0_0_30px_rgba(34,211,238,0.4)]'
-                        : 'bg-cyan-950 text-cyan-900 opacity-50 cursor-not-allowed'
-                    }`}
-                  >
-                    Initiate Fusion
-                  </button>
-                </div>
-
-                {/* Recent History */}
-                <div className="bg-black/40 border border-cyan-900/30 p-4">
-                  <h4 className="text-[10px] text-cyan-500 font-bold uppercase mb-4 border-b border-cyan-500/10 pb-2">Fusion Logs</h4>
-                  <div className="space-y-3">
-                    {fusionHistory.map((log, i) => (
-                      <div key={i} className="text-[9px] text-cyan-100/50 font-mono leading-tight flex gap-2">
-                        <span className="text-cyan-500">[{i}]</span> {log}
-                      </div>
-                    ))}
-                    {fusionHistory.length === 0 && <div className="text-[10px] text-cyan-900 italic">No fusion records found.</div>}
-                  </div>
-                </div>
-                
-                {/* Codex Stats */}
-                <div className="bg-cyan-400/5 border border-cyan-400/20 p-4">
-                  <div className="text-[10px] text-cyan-400 font-black uppercase mb-1 flex justify-between">
-                    Codex Completion
-                    <span className="text-cyan-800">SYNC: READY</span>
-                  </div>
-                  <div className="flex justify-between items-end">
-                    <div className="text-2xl font-black text-white font-mono">{relicCodex.length} <span className="text-[10px] text-cyan-400">DISCOVERED</span></div>
-                    <div className="text-[8px] text-cyan-500 font-bold">X-99 NEURAL ARCHIVE</div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <RelicCodex />
           </div>
         </div>
       )}
@@ -577,35 +537,90 @@ export default function App() {
                   Live Feed: Sector 7
                 </div>
               </div>
-            </div>            {/* Legend Selection */}
-            <h3 className="text-cyan-500/30 text-[10px] font-bold uppercase tracking-[0.5em] mb-6 font-display">Select Tactical Operator</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-20 w-full">
-              {LEGENDS.map((legend: any) => (
+            </div>
+
+            {/* Rarity Filter */}
+            <div className="flex gap-4 mb-8">
+              {(['platinum', 'silver'] as const).map(r => (
+                <button
+                  key={r}
+                  onClick={() => setRarityFilter(r)}
+                  className={`px-8 py-2 border text-xs font-black uppercase tracking-[0.3em] transition-all ${
+                    rarityFilter === r 
+                      ? 'bg-cyan-400 text-black border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.4)]' 
+                      : 'bg-transparent text-cyan-900 border-cyan-900/30 hover:border-cyan-500/50'
+                  }`}
+                >
+                  {r} Units
+                </button>
+              ))}
+            </div>
+
+            {/* Legend Selection */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-20 w-full">
+              {filteredLegends.map((legend) => (
                 <button
                   key={legend.id}
                   onClick={() => setSelectedLegend(legend)}
-                  className={`p-4 border transition-all duration-300 rounded-sm text-left relative group ${
+                  className={`p-5 border transition-all duration-300 rounded-sm text-left relative group flex flex-col ${
                     selectedLegend.id === legend.id 
-                      ? 'bg-cyan-500/20 border-cyan-400 shadow-[0_0_30px_rgba(34,211,238,0.2)]' 
-                      : 'bg-black/40 border-cyan-900/30 hover:border-cyan-500/50'
+                      ? 'bg-cyan-500/10 border-cyan-400 shadow-[0_0_30px_rgba(34,211,238,0.15)]' 
+                      : 'bg-black/40 border-cyan-900/10 hover:border-cyan-500/30'
                   }`}
                 >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${
-                      legend.rarity === 'epic' ? 'bg-purple-500/20 text-purple-400' : 
-                      legend.rarity === 'rare' ? 'bg-blue-500/20 text-blue-400' :
-                      'bg-cyan-500/20 text-cyan-400'
-                    }`}>
-                      {legend.rarity}
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex flex-col">
+                      <div className={`text-[8px] font-black uppercase tracking-[0.2em] mb-1 ${
+                        legend.rarity === 'platinum' ? 'text-cyan-400' : 'text-slate-500'
+                      }`}>
+                        {legend.specialization.replace(/_/g, ' ')}
+                      </div>
+                      <h3 className="text-2xl font-black text-white uppercase tracking-tighter font-display leading-none">
+                        {legend.codename || legend.name.split(' ')[0]}
+                      </h3>
                     </div>
-                    {selectedLegend.id === legend.id && <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />}
+                    {selectedLegend.id === legend.id && (
+                      <div className="w-3 h-3 bg-cyan-400 rounded-full shadow-[0_0_10px_rgba(34,211,238,1)] animate-pulse" />
+                    )}
                   </div>
-                  <h3 className="text-xl font-black text-white uppercase mb-1 tracking-tighter font-display">{legend.name}</h3>
-                  <p className="text-[10px] text-cyan-100/50 leading-tight mb-4 line-clamp-2 h-8">{legend.description}</p>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-[8px] font-bold text-cyan-600 uppercase font-mono">
-                    <span>SPD: {legend.speed}x</span>
-                    <span>ABILITY: {legend.specialAbility}</span>
-                    <span>READY: {legend.abilityCooldown/1000}s</span>
+
+                  <div className="mb-4">
+                    <div className="text-[10px] font-bold text-white/90 uppercase mb-1">{legend.name}</div>
+                    <p className="text-[9px] text-cyan-100/30 leading-tight line-clamp-2 h-6 italic">"{legend.description}"</p>
+                  </div>
+
+                  {/* Stat Bars */}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-6 border-t border-cyan-500/10 pt-4">
+                    {[
+                      { label: 'HLT', val: legend.stats.health },
+                      { label: 'ARM', val: legend.stats.armor },
+                      { label: 'SPD', val: legend.stats.speed },
+                      { label: 'ACC', val: legend.stats.accuracy },
+                      { label: 'STL', val: legend.stats.stealth },
+                      { label: 'LDR', val: legend.stats.leadership }
+                    ].map(stat => (
+                      <div key={stat.label} className="flex flex-col gap-1">
+                        <div className="flex justify-between items-center text-[7px] font-black text-cyan-700">
+                          <span>{stat.label}</span>
+                          <span>{stat.val}</span>
+                        </div>
+                        <div className="h-0.5 bg-cyan-950 w-full overflow-hidden">
+                          <div 
+                            className={`h-full transition-all duration-1000 ${legend.rarity === 'platinum' ? 'bg-cyan-500' : 'bg-slate-500'}`}
+                            style={{ width: `${stat.val}%` }} 
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex justify-between items-center mt-auto pt-2 border-t border-cyan-500/5">
+                    <div className="text-[8px] font-bold text-cyan-600 uppercase font-mono">
+                      {legend.specialAbility}
+                    </div>
+                    <div className="text-[8px] text-cyan-900 font-mono">
+                      CD: {legend.abilityCooldown/1000}s
+                    </div>
                   </div>
                 </button>
               ))}

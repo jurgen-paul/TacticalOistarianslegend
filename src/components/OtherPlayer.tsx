@@ -9,6 +9,7 @@ import { RigidBody, RapierRigidBody, CapsuleCollider } from '@react-three/rapier
 import * as THREE from 'three';
 import { useGameStore } from '../store';
 import { Text } from '@react-three/drei';
+import { HealthBar } from './HealthBar';
 
 export function OtherPlayer({ id }: { id: string }) {
   const data = useGameStore(state => state.otherPlayers[id]);
@@ -86,6 +87,9 @@ export function OtherPlayer({ id }: { id: string }) {
         </mesh>
 
         {/* Username Label */}
+        {data.state === 'active' && (
+          <HealthBar current={data.health || 100} max={data.maxHealth || 100} position={[0, 3.1, 0]} width={1.0} />
+        )}
         <Text
           position={[0, 2.8, 0]}
           fontSize={0.25}

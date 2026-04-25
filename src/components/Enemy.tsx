@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { useGameStore, EnemyData, EntityState } from '../store';
 import { soundManager } from '../lib/sounds';
 import { Text } from '@react-three/drei';
+import { HealthBar } from './HealthBar';
 
 const ENEMY_SPEED = 3;
 const CHASE_DIST = 15; // Reduced from 20
@@ -316,6 +317,9 @@ export function Enemy({ data }: { data: EnemyData }) {
         {data.type === 'standard' && <StandardModel state={data.state} color={stats.color} lastHitTime={data.lastHitTime} />}
 
         {/* Drone ID Label */}
+        {data.state === 'active' && (
+          <HealthBar current={data.health} max={data.maxHealth} position={[0, data.type === 'sniper' ? 3.5 : 2.8, 0]} width={0.8} height={0.08} />
+        )}
         <Text
           position={[0, data.type === 'sniper' ? 3.2 : 2.5, 0]}
           fontSize={0.2}

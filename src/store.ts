@@ -39,13 +39,61 @@ export interface Mission {
   id: string;
   title: string;
   description: string;
+  location?: string;
   objectives: string[];
-  environment: string;
+  hazards?: string[];
   enemies: EnemyType[];
+  environment: string;
+  resonanceUnlocked?: boolean;
   triggers: Record<string, Trigger>;
 }
 
 export const MISSIONS: Mission[] = [
+  {
+    id: 'eden_surge',
+    title: 'Vault Protocol: Eden Surge',
+    description: 'Navigate the pulse-reactive corridors of the Eden Vault and extract the Surge Protocol.',
+    location: 'Eden Vault - Subterranean Memory Core',
+    objectives: [
+      'Infiltrate the Eden Vault undetected',
+      'Extract the Surge Protocol from Core Node 7',
+      'Avoid triggering emotional traps',
+      'Ensure Echo Vanguard survives'
+    ],
+    hazards: ['emotional feedback loops', 'AI sentinels', 'memory wraiths'],
+    enemies: ["ghost", "standard"],
+    environment: "Pulse-reactive corridors",
+    triggers: {
+      flashback: {
+        condition: (state) => Math.random() < 0.001 && state.playerState === 'active',
+        effect: (state) => {
+          state.addVoiceLine("FLASHBACK", "The corridor. The child. The silence.");
+          state.addEvent("EMOTIONAL FEEDBACK: FLASHBACK DETECTED");
+          return { 
+            playerDisabledUntil: Date.now() + 10000, 
+            playerState: 'disabled',
+            moralityScore: Math.max(0, state.moralityScore - 5)
+          };
+        }
+      },
+      betrayal: {
+        condition: (state) => state.trustScore < 60 && state.selectedLegend.specialization === 'ECHO_VANGUARD' && !state.events.some(e => e.message === "NEUROPULSE MODULE DISABLED"),
+        effect: (state) => {
+          state.addVoiceLine("ECHO VANGUARD", "I feel the pulse... It's reacting to us. Your instability is a risk.");
+          state.addEvent("NEUROPULSE MODULE DISABLED");
+          return { empCooldown: Date.now() + 99999999 };
+        }
+      },
+      surge_unlock: {
+        condition: (state) => state.moralityScore > 70 && state.selectedLegend.specialization === 'ECHO_VANGUARD' && !state.currentMission?.resonanceUnlocked,
+        effect: (state) => {
+          state.addVoiceLine("SYSTEM", "Molecular synergy detected. Tactical resonance gear available.");
+          state.addEvent("EDEN SURGE PROTOCOL UNLOCKED");
+          return { currentMission: { ...state.currentMission, resonanceUnlocked: true } };
+        }
+      }
+    }
+  },
   {
     id: "vault_breathes",
     title: "THE VAULT BREATHES",
@@ -67,239 +115,294 @@ export const MISSIONS: Mission[] = [
   }
 ];
 
+export type Specialization = 
+  | 'SNIPER' 
+  | 'ASSAULT' 
+  | 'MEDIC' 
+  | 'ENGINEER' 
+  | 'DEMOLITIONS' 
+  | 'RECONNAISSANCE' 
+  | 'COMMUNICATIONS' 
+  | 'ANTI_ARMOR' 
+  | 'HEAVY_WEAPONS' 
+  | 'CYBER_WARFARE'
+  | 'ECHO_VANGUARD';
+
+export interface LegendStats {
+  health: number;
+  armor: number;
+  speed: number;
+  accuracy: number;
+  stealth: number;
+  leadership: number;
+  emotionalDisruption?: boolean;
+}
+
 export interface LegendData {
   id: string;
   name: string;
+  codename?: string;
+  specialization: Specialization;
   description: string;
-  speed: number;
+  stats: LegendStats;
   dashCooldown: number;
   abilityCooldown: number;
   abilityDuration?: number;
-  specialAbility: 'emp' | 'overdrive' | 'stealth' | 'shield' | 'jamming' | 'breach';
-  rarity: 'common' | 'rare' | 'epic';
+  specialAbility: 'emp' | 'overdrive' | 'stealth' | 'shield' | 'jamming' | 'breach' | 'echo_pulse';
+  rarity: 'silver' | 'platinum';
 }
 
 export const LEGENDS: LegendData[] = [
-  { 
-    id: 'titan', 
-    name: 'Titan', 
-    description: 'Heavy assault unit with tactical EMP suppression.', 
-    speed: 1, 
-    dashCooldown: 2000, 
-    abilityCooldown: 15000, 
-    specialAbility: 'emp',
-    rarity: 'common'
-  },
-  { 
-    id: 'stryker', 
-    name: 'Stryker', 
-    description: 'High-mobility skirmisher with Overdrive hyper-fire.', 
-    speed: 1.4, 
-    dashCooldown: 1200, 
-    abilityCooldown: 12000, 
-    specialAbility: 'overdrive',
-    rarity: 'epic'
+  // --- PLATINUM ELITES (Top 25) ---
+  {
+    id: 'ghost',
+    name: "Maya Cohen",
+    codename: "ECHO VANGUARD",
+    specialization: 'ECHO_VANGUARD',
+    description: "Specialist in neuro-tactical infiltration and emotional disruption.",
+    stats: { health: 90, armor: 40, speed: 75, accuracy: 98, stealth: 90, leadership: 85, emotionalDisruption: true },
+    dashCooldown: 1200,
+    abilityCooldown: 15000,
+    abilityDuration: 8000,
+    specialAbility: 'echo_pulse',
+    rarity: 'platinum'
   },
   {
-    id: 'nasser',
-    name: 'Ahmed Nasser',
-    description: 'Recon & Surveillance. Expertise in comms jamming and stealth reconnaissance.',
-    speed: 1.2,
+    id: 'storm',
+    name: "Tal Levi",
+    codename: "STORM",
+    specialization: 'ASSAULT',
+    description: "Front-line combatant specializing in close-quarters battle.",
+    stats: { health: 120, armor: 80, speed: 85, accuracy: 90, stealth: 60, leadership: 88 },
+    dashCooldown: 1000,
+    abilityCooldown: 12000,
+    abilityDuration: 5000,
+    specialAbility: 'overdrive',
+    rarity: 'platinum'
+  },
+  {
+    id: 'angel',
+    name: "Liora Goldberg",
+    codename: "ANGEL",
+    specialization: 'MEDIC',
+    description: "Field medic with advanced trauma care training.",
+    stats: { health: 95, armor: 60, speed: 82, accuracy: 78, stealth: 70, leadership: 95 },
     dashCooldown: 1500,
     abilityCooldown: 14000,
-    specialAbility: 'jamming',
-    rarity: 'rare'
-  },
-  {
-    id: 'varga',
-    name: 'Sofia Varga',
-    description: 'Intelligence field operative. Masters signal interception and cyber infiltration.',
-    speed: 1.1,
-    dashCooldown: 1800,
-    abilityCooldown: 13000,
-    specialAbility: 'emp',
-    rarity: 'epic'
-  },
-  {
-    id: 'tank_brooks',
-    name: 'Darnell Brooks',
-    description: 'Heavy Assault & Breach. Urban warfare veteran known for tactical demolition.',
-    speed: 0.9,
-    dashCooldown: 2500,
-    abilityCooldown: 16000,
-    specialAbility: 'breach',
-    rarity: 'rare'
-  },
-  {
-    id: 'toma',
-    name: 'Elira Toma',
-    description: 'Long-Range Recon & Survival. Expert tracker raised in remote highlands.',
-    speed: 1.3,
-    dashCooldown: 1300,
-    abilityCooldown: 11000,
-    specialAbility: 'stealth',
-    rarity: 'rare'
-  },
-  {
-    id: 'ramires',
-    name: 'Kael Ramires',
-    description: 'Experimental Bio-Tech unit with enhanced neural combant interface.',
-    speed: 1.5,
-    dashCooldown: 1000,
-    abilityCooldown: 18000,
-    specialAbility: 'overdrive',
-    rarity: 'epic'
-  },
-  {
-    id: 'thorne',
-    name: 'Malrik Thorne',
-    description: 'Crimson Vow Ritualist. Master of oathblade discipline and combat meditation.',
-    speed: 1.1,
-    dashCooldown: 1600,
-    abilityCooldown: 12000,
+    abilityDuration: 6000,
     specialAbility: 'shield',
-    rarity: 'epic'
+    rarity: 'platinum'
   },
   {
-    id: 'nyx',
-    name: 'Nyx',
-    description: 'Echo Syndicate Cipher. Operates with digital cloaking and neural disruption.',
-    speed: 1.2,
-    dashCooldown: 1400,
+    id: 'tech',
+    name: "Gal Rosenberg",
+    codename: "TECH",
+    specialization: 'ENGINEER',
+    description: "Combat engineer skilled in fortifications and signal jamming.",
+    stats: { health: 85, armor: 70, speed: 65, accuracy: 82, stealth: 75, leadership: 85 },
+    dashCooldown: 2000,
     abilityCooldown: 15000,
+    abilityDuration: 8000,
     specialAbility: 'jamming',
-    rarity: 'epic'
+    rarity: 'platinum'
   },
   {
-    id: 'moss',
-    name: 'Kaela Moss',
-    description: 'Verdant Pact Warden. Expert in terrain adaptation and biotech fieldcraft.',
-    speed: 1.2,
-    dashCooldown: 1500,
-    abilityCooldown: 13000,
+    id: 'boom',
+    name: "Inbar Yakir",
+    codename: "BOOM",
+    specialization: 'DEMOLITIONS',
+    description: "Explosives expert trained in lethal breaching maneuvers.",
+    stats: { health: 100, armor: 85, speed: 70, accuracy: 88, stealth: 65, leadership: 80 },
+    dashCooldown: 2200,
+    abilityCooldown: 18000,
+    abilityDuration: 4000,
+    specialAbility: 'breach',
+    rarity: 'platinum'
+  },
+  {
+    id: 'scout_elite',
+    name: "Hila Dahan",
+    codename: "SCOUT",
+    specialization: 'RECONNAISSANCE',
+    description: "Scout specialist with advanced gathering experience.",
+    stats: { health: 80, armor: 45, speed: 95, accuracy: 85, stealth: 98, leadership: 75 },
+    dashCooldown: 800,
+    abilityCooldown: 11000,
+    abilityDuration: 8000,
     specialAbility: 'stealth',
-    rarity: 'rare'
+    rarity: 'platinum'
   },
   {
-    id: 'vex_9',
-    name: 'Vex-9',
-    description: 'Iron Dominion Enforcer. Cybernetic heavy assault with reinforced exo-frame.',
-    speed: 0.85,
+    id: 'crusher_elite',
+    name: "Vered Barak",
+    codename: "CRUSHER",
+    specialization: 'HEAVY_WEAPONS',
+    description: "Heavy weapons operator specializing in suppressive fire.",
+    stats: { health: 125, armor: 95, speed: 50, accuracy: 88, stealth: 40, leadership: 88 },
     dashCooldown: 3000,
     abilityCooldown: 20000,
+    abilityDuration: 6000,
     specialAbility: 'shield',
-    rarity: 'epic'
+    rarity: 'platinum'
   },
   {
-    id: 'cohen',
-    name: 'Eli Cohen',
-    description: 'Combat Engineer. Specialist in field construction and signal jamming fortifications.',
-    speed: 1.0,
-    dashCooldown: 2000,
+    id: 'hacker_elite',
+    name: "Noy Ashkenazi",
+    codename: "HACKER",
+    specialization: 'CYBER_WARFARE',
+    description: "Cyber ops specialist with expertise in digital infiltration.",
+    stats: { health: 75, armor: 35, speed: 85, accuracy: 75, stealth: 88, leadership: 90 },
+    dashCooldown: 1400,
     abilityCooldown: 15000,
+    abilityDuration: 8000,
     specialAbility: 'jamming',
-    rarity: 'rare'
+    rarity: 'platinum'
   },
   {
-    id: 'avraham',
-    name: 'Ben Avraham',
-    description: 'Underwater Engineer. Expert in maritime infiltration and high-pressure salvage.',
-    speed: 1.1,
-    dashCooldown: 1800,
-    abilityCooldown: 12000,
+    id: 'silence_elite',
+    name: "Noa Roth",
+    codename: "SILENCE",
+    specialization: 'SNIPER',
+    description: "Shadow operative trained in high-altitude precision.",
+    stats: { health: 85, armor: 35, speed: 80, accuracy: 96, stealth: 92, leadership: 75 },
+    dashCooldown: 1500,
+    abilityCooldown: 16000,
+    abilityDuration: 7000,
     specialAbility: 'stealth',
-    rarity: 'rare'
+    rarity: 'platinum'
   },
   {
-    id: 'mor',
-    name: 'Eliya Mor',
-    description: 'Medical Logistics & Triage. Expert in field evacuation planning and supply routing.',
-    speed: 1.1,
-    dashCooldown: 1800,
-    abilityCooldown: 14000,
+    id: 'thunder_elite',
+    name: "Yael Katz",
+    codename: "THUNDER",
+    specialization: 'ASSAULT',
+    description: "Heavy assault specialist with reinforced ballistic plating.",
+    stats: { health: 115, armor: 75, speed: 88, accuracy: 87, stealth: 55, leadership: 85 },
+    dashCooldown: 1200,
+    abilityCooldown: 13000,
+    abilityDuration: 6000,
+    specialAbility: 'overdrive',
+    rarity: 'platinum'
+  },
+  {
+    id: 'lifeline_elite',
+    name: "Michal Ben-David",
+    codename: "LIFELINE",
+    specialization: 'MEDIC',
+    description: "Battlefield trauma lead with rapid extraction certifications.",
+    stats: { health: 92, armor: 55, speed: 85, accuracy: 75, stealth: 68, leadership: 92 },
+    dashCooldown: 1600,
+    abilityCooldown: 15000,
+    abilityDuration: 6000,
     specialAbility: 'shield',
-    rarity: 'rare'
+    rarity: 'platinum'
   },
   {
-    id: 'rosenfeld',
+    id: 'digital_elite',
+    name: "Stav Mizrahi",
+    codename: "DIGITAL",
+    specialization: 'CYBER_WARFARE',
+    description: "Digital infiltration specialist with adaptive firewall tech.",
+    stats: { health: 78, armor: 38, speed: 88, accuracy: 78, stealth: 85, leadership: 88 },
+    dashCooldown: 1400,
+    abilityCooldown: 14000,
+    abilityDuration: 8000,
+    specialAbility: 'jamming',
+    rarity: 'platinum'
+  },
+  {
+    id: 'blitz_elite',
+    name: "Adi Shamir",
+    codename: "BLITZ",
+    specialization: 'ASSAULT',
+    description: "Rapid deployment specialist with enhanced dash capabilities.",
+    stats: { health: 118, armor: 78, speed: 90, accuracy: 89, stealth: 58, leadership: 90 },
+    dashCooldown: 800,
+    abilityCooldown: 11000,
+    abilityDuration: 5000,
+    specialAbility: 'overdrive',
+    rarity: 'platinum'
+  },
+  {
+    id: 'phoenix_elite',
+    name: "Hadar Klein",
+    codename: "PHOENIX",
+    specialization: 'MEDIC',
+    description: "Combat rescue lead with field-regeneration protocols.",
+    stats: { health: 98, armor: 58, speed: 80, accuracy: 80, stealth: 72, leadership: 88 },
+    dashCooldown: 1800,
+    abilityCooldown: 16000,
+    abilityDuration: 8000,
+    specialAbility: 'shield',
+    rarity: 'platinum'
+  },
+  {
+    id: 'blast_elite',
+    name: "Keren Tzur",
+    codename: "BLAST",
+    specialization: 'DEMOLITIONS',
+    description: "Shockwave demolitionist trained in area-denial blasts.",
+    stats: { health: 105, armor: 82, speed: 68, accuracy: 90, stealth: 62, leadership: 78 },
+    dashCooldown: 2400,
+    abilityCooldown: 17000,
+    abilityDuration: 4000,
+    specialAbility: 'breach',
+    rarity: 'platinum'
+  },
+
+
+  // --- SILVER VETERANS ---
+  {
+    id: 'rosenfeld_v',
     name: 'Hannah Rosenfeld',
-    description: 'Sniper & Overwatch. Precision marksman specialized in waterline concealment and long-range optics.',
-    speed: 1.0,
-    dashCooldown: 2200,
+    codename: 'OVERWATCH',
+    specialization: 'SNIPER',
+    description: 'Precision marksman specialized in waterline concealment.',
+    stats: { health: 85, armor: 35, speed: 80, accuracy: 96, stealth: 92, leadership: 75 },
+    dashCooldown: 2000,
     abilityCooldown: 16000,
+    abilityDuration: 7000,
     specialAbility: 'stealth',
-    rarity: 'epic'
+    rarity: 'silver'
   },
   {
-    id: 'farouk',
+    id: 'farouk_v',
     name: 'Leila Farouk',
-    description: 'Sniper/Spotter. Precision shooter with advanced camouflage specialties and long-range metrics.',
-    speed: 1.0,
-    dashCooldown: 2200,
+    codename: 'SPOTTER',
+    specialization: 'SNIPER',
+    description: 'Precision shooter with advanced camouflage specialties.',
+    stats: { health: 88, armor: 38, speed: 77, accuracy: 97, stealth: 90, leadership: 78 },
+    dashCooldown: 2000,
     abilityCooldown: 16000,
+    abilityDuration: 7000,
     specialAbility: 'stealth',
-    rarity: 'rare'
+    rarity: 'silver'
   },
   {
-    id: 'hadid',
+    id: 'hadid_v',
     name: 'Noor Hadid',
-    description: 'Diver & EOD Technician. Specialist in underwater breaching and explosive ordnance neutralization.',
-    speed: 1.1,
+    codename: 'BREACH',
+    specialization: 'DEMOLITIONS',
+    description: 'Diver & EOD Technician. Specialist in underwater breaching.',
+    stats: { health: 105, armor: 82, speed: 68, accuracy: 90, stealth: 62, leadership: 78 },
     dashCooldown: 1700,
     abilityCooldown: 13000,
+    abilityDuration: 4000,
     specialAbility: 'breach',
-    rarity: 'epic'
+    rarity: 'silver'
   },
   {
-    id: 'qadri',
-    name: 'Omar Qadri',
-    description: 'RSO (Range Safety Officer). Former range master, calm under pressure. Expert in safety protocols and supervised field operations.',
-    speed: 1.0,
-    dashCooldown: 2000,
-    abilityCooldown: 16000,
-    specialAbility: 'shield',
-    rarity: 'rare'
-  },
-  {
-    id: 'saban',
-    name: 'Raya Saban',
-    description: 'Diver Captain & Mobility Lead. Experienced dive team lead specializing in team safety and surface-swim logistics.',
-    speed: 1.4,
-    dashCooldown: 1200,
-    abilityCooldown: 14000,
-    specialAbility: 'overdrive',
-    rarity: 'epic'
-  },
-  {
-    id: 'ben_ami',
-    name: 'Sara Ben-Ami',
-    description: 'Combat Medic. Marines medical corps veteran with expertise in rapid-water extraction and field medevac.',
-    speed: 1.1,
-    dashCooldown: 1800,
-    abilityCooldown: 15000,
-    specialAbility: 'shield',
-    rarity: 'rare'
-  },
-  {
-    id: 'rubin',
-    name: 'Yonina Rubin',
-    description: 'EOD Specialist. Expert in underwater explosives risk and remote detonation protocols.',
-    speed: 0.95,
-    dashCooldown: 2200,
-    abilityCooldown: 18000,
-    specialAbility: 'breach',
-    rarity: 'epic'
-  },
-  {
-    id: 'petrova',
+    id: 'petrova_v',
     name: 'Anya Petrova',
-    description: 'Former elite guard with enhanced defensive capabilities. Operates with advanced Kinetic Barrier technology.',
-    speed: 1.0,
+    codename: 'GUARDIAN',
+    specialization: 'ASSAULT',
+    description: 'Former elite guard with enhanced defensive capabilities.',
+    stats: { health: 110, armor: 90, speed: 70, accuracy: 85, stealth: 50, leadership: 80 },
     dashCooldown: 2000,
     abilityCooldown: 15000,
     abilityDuration: 5000,
     specialAbility: 'shield',
-    rarity: 'epic'
+    rarity: 'silver'
   }
 ];
 
@@ -310,6 +413,8 @@ export interface EnemyData {
   disabledUntil: number;
   type: EnemyType;
   lastHitTime: number; // For visual hit flash
+  health: number;
+  maxHealth: number;
   isShielded?: boolean;
   isBoosting?: boolean;
 }
@@ -332,6 +437,8 @@ export interface PlayerData {
   disabledUntil: number;
   score: number;
   color: string;
+  health: number;
+  maxHealth: number;
 }
 
 export interface LaserData {
@@ -457,6 +564,8 @@ interface GameStore {
   particles: ParticleData[];
   projectiles: ProjectileData[];
   events: GameEvent[];
+  playerHealth: number;
+  playerMaxHealth: number;
   lastHitTime: number; // Time when player hits an enemy
   lastDamageTime: number; // Time when player takes damage
   playerPosition: [number, number, number];
@@ -568,12 +677,12 @@ export const ENEMY_SPAWN_POINTS = [
 ];
 
 const INITIAL_ENEMIES: EnemyData[] = [
-  { id: 'bot-1', position: [40, 1, 40], state: 'active', disabledUntil: 0, type: 'scout', lastHitTime: 0 },
-  { id: 'bot-2', position: [-40, 1, 40], state: 'active', disabledUntil: 0, type: 'tank', lastHitTime: 0 },
-  { id: 'bot-3', position: [40, 1, -40], state: 'active', disabledUntil: 0, type: 'sniper', lastHitTime: 0 },
-  { id: 'bot-4', position: [-40, 1, -40], state: 'active', disabledUntil: 0, type: 'standard', lastHitTime: 0 },
-  { id: 'bot-5', position: [0, 1, 60], state: 'active', disabledUntil: 0, type: 'ghost', lastHitTime: 0 },
-  { id: 'bot-6', position: [0, 1, -60], state: 'active', disabledUntil: 0, type: 'ghost', lastHitTime: 0 },
+  { id: 'bot-1', position: [40, 1, 40], state: 'active', disabledUntil: 0, type: 'scout', lastHitTime: 0, health: 50, maxHealth: 50 },
+  { id: 'bot-2', position: [-40, 1, 40], state: 'active', disabledUntil: 0, type: 'tank', lastHitTime: 0, health: 250, maxHealth: 250 },
+  { id: 'bot-3', position: [40, 1, -40], state: 'active', disabledUntil: 0, type: 'sniper', lastHitTime: 0, health: 80, maxHealth: 80 },
+  { id: 'bot-4', position: [-40, 1, -40], state: 'active', disabledUntil: 0, type: 'standard', lastHitTime: 0, health: 100, maxHealth: 100 },
+  { id: 'bot-5', position: [0, 1, 60], state: 'active', disabledUntil: 0, type: 'ghost', lastHitTime: 0, health: 60, maxHealth: 60 },
+  { id: 'bot-6', position: [0, 1, -60], state: 'active', disabledUntil: 0, type: 'ghost', lastHitTime: 0, health: 60, maxHealth: 60 },
 ];
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -589,6 +698,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   events: [],
   lastHitTime: 0,
   lastDamageTime: 0,
+  playerHealth: 100,
+  playerMaxHealth: 100,
   playerPosition: [0, 0, 0],
   playerRotation: 0,
   dashCooldown: 0,
@@ -689,7 +800,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   selectedLegend: LEGENDS[0],
-  setSelectedLegend: (selectedLegend) => set({ selectedLegend }),
+  setSelectedLegend: (selectedLegend) => set({ 
+    selectedLegend,
+    playerHealth: selectedLegend.stats.health,
+    playerMaxHealth: selectedLegend.stats.health
+  }),
   overdriveActiveUntil: 0,
   stealthActiveUntil: 0,
   shieldActiveUntil: 0,
@@ -852,7 +967,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       timeLeft: 120,
       playerState: 'active',
       playerDisabledUntil: 0,
-      enemies: INITIAL_ENEMIES.map(e => ({ ...e, state: 'active', disabledUntil: 0 })),
+      playerHealth: get().selectedLegend.stats.health,
+      playerMaxHealth: get().selectedLegend.stats.health,
+      enemies: INITIAL_ENEMIES.map(e => ({ ...e, state: 'active', disabledUntil: 0, health: e.maxHealth })),
       lasers: [],
       particles: [],
       events: [],
@@ -932,10 +1049,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
       setTimeout(() => state.addVoiceLine("ECHO VANGUARD", "Commander, your performance is... concerning. Recalibrating loyalty parameters."), 1000);
     }
 
+    const damage = 20; // Standard damage
+    const newHealth = Math.max(0, state.playerHealth - damage);
+
+    if (newHealth <= 0) {
+      return {
+        playerHealth: 0,
+        playerState: 'disabled',
+        playerDisabledUntil: Date.now() + 3000,
+        score: Math.max(0, state.score - 50),
+        lastDamageTime: Date.now(),
+        trustScore: newTrust
+      };
+    }
+
     return {
-      playerState: 'disabled',
-      playerDisabledUntil: Date.now() + 3000,
-      score: Math.max(0, state.score - 50),
+      playerHealth: newHealth,
       lastDamageTime: Date.now(),
       trustScore: newTrust
     };
@@ -944,33 +1073,50 @@ export const useGameStore = create<GameStore>((set, get) => ({
   hitEnemy: (id, byPlayer = false) => set((state) => {
     if (state.gameState !== 'playing') return state;
     
-    // Check if it's a multiplayer player
+    // Check if it's a multiplayer player (Binary hit system for multiplayer simplified)
     if (state.socket && state.otherPlayers[id]) {
       state.socket.emit('hitPlayer', id);
       return state;
     }
 
+    let enemyKilled = false;
     const enemies = state.enemies.map(e => {
       if (e.id === id && e.state === 'active') {
         if (e.isShielded) {
           soundManager.play('shoot', 0.2); // Shield hit sound
           return e;
         }
-        soundManager.play('enemy_death', 0.4);
-        let disableDuration = 3000;
-        if (e.type === 'tank') disableDuration = 5000;
-        if (e.type === 'scout') disableDuration = 2000;
-        
-        return { ...e, state: 'disabled' as EntityState, disabledUntil: Date.now() + disableDuration, lastHitTime: Date.now() };
+
+        const damage = state.selectedWeapon.baseDamage;
+        const newHealth = Math.max(0, e.health - damage);
+
+        if (newHealth <= 0) {
+          enemyKilled = true;
+          soundManager.play('enemy_death', 0.4);
+          let disableDuration = 3000;
+          if (e.type === 'tank') disableDuration = 5000;
+          if (e.type === 'scout') disableDuration = 2000;
+          return { 
+            ...e, 
+            health: 0, 
+            state: 'disabled' as EntityState, 
+            disabledUntil: Date.now() + disableDuration, 
+            lastHitTime: Date.now() 
+          };
+        }
+
+        soundManager.play('shoot', 0.1); // Small hit feedback sound
+        return { ...e, health: newHealth, lastHitTime: Date.now() };
       }
       return e;
     });
-    const scoreGain = byPlayer ? Math.round(100 * (state.selectedWeapon.baseDamage / 25)) : 0;
+
+    const scoreGain = (byPlayer && enemyKilled) ? Math.round(100 * (state.selectedWeapon.baseDamage / 25)) : 5;
     return {
       enemies,
-      score: state.score + scoreGain,
+      score: state.score + (byPlayer ? scoreGain : 0),
       lastHitTime: byPlayer ? Date.now() : state.lastHitTime,
-      events: byPlayer ? [...state.events, { id: Math.random().toString(), message: `TARGET NEUTRALIZED (+${scoreGain})`, timestamp: Date.now() }] : state.events
+      events: (byPlayer && enemyKilled) ? [...state.events, { id: Math.random().toString(), message: `TARGET NEUTRALIZED (+${scoreGain})`, timestamp: Date.now() }] : state.events
     };
   }),
 
@@ -1002,7 +1148,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (e.state === 'disabled' && time > e.disabledUntil) {
         changed = true;
         soundManager.play('spawn', 0.2);
-        return { ...e, state: 'active' as EntityState, isShielded: false, isBoosting: false };
+        return { ...e, state: 'active' as EntityState, health: e.maxHealth, isShielded: false, isBoosting: false };
       }
       return e;
     });
@@ -1023,7 +1169,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     if (state.playerState === 'disabled' && time > state.playerDisabledUntil) {
       soundManager.play('spawn', 0.3);
-      return { enemies, playerState: 'active', otherPlayers: playersChanged ? otherPlayers : state.otherPlayers };
+      return { 
+        enemies, 
+        playerState: 'active', 
+        playerHealth: state.playerMaxHealth,
+        otherPlayers: playersChanged ? otherPlayers : state.otherPlayers 
+      };
     }
     return changed || playersChanged ? { enemies, otherPlayers } : state;
   }),
@@ -1127,6 +1278,31 @@ export const useGameStore = create<GameStore>((set, get) => ({
       };
     }
 
+    if (ability === 'echo_pulse') {
+      soundManager.play('ready', 0.5);
+      const duration = state.selectedLegend.abilityDuration || 8000;
+      
+      // Echo Pulse disables nearby enemies AND applies a disruption field
+      const enemies = state.enemies.map(e => {
+        const dist = Math.sqrt(
+          Math.pow(e.position[0] - state.playerPosition[0], 2) +
+          Math.pow(e.position[2] - state.playerPosition[2], 2)
+        );
+        if (dist < 40 && e.state === 'active') {
+          return { ...e, state: 'disabled' as EntityState, disabledUntil: now + duration, lastHitTime: now };
+        }
+        return e;
+      });
+
+      return {
+        enemies,
+        empCooldown: now + state.selectedLegend.abilityCooldown,
+        stealthActiveUntil: now + duration, // Echo Pulse includes stealth
+        empReadyNotified: false,
+        events: [...state.events, { id: Math.random().toString(), message: "ECHO PULSE: EMOTIONAL DISRUPTION ACTIVE", timestamp: now }]
+      };
+    }
+
     if (ability === 'breach') {
       soundManager.play('alert', 0.5);
       return {
@@ -1188,7 +1364,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
             newControlledBy = 'player';
             
             // Narrative consequence: Gaining trust on success
-            set(s => ({ trustScore: Math.min(100, s.trustScore + 10) }));
+            set(s => ({ 
+              trustScore: Math.min(100, s.trustScore + 10),
+              moralityScore: Math.min(100, s.moralityScore + 5)
+            }));
             state.addVoiceLine("OISTARIAN", "Excellent work. The vault's pulse is stabilizing.");
           }
         } else if (obj.controlledBy !== 'player') {

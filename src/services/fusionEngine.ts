@@ -111,11 +111,41 @@ class LoreComposer {
     ];
     return `${intros[Math.floor(Math.random() * intros.length)]} This fusion represents a bridge between ${a.name} and ${b.name}.`;
   }
+
+  static appendLore(relic: Relic, fragments: string[]): string {
+    const existingLore = relic.lore || "";
+    return existingLore + (existingLore ? "\n" : "") + fragments.join("\n");
+  }
+}
+
+export interface OpponentData {
+  name: string;
+  faction: Faction;
+  usedRelicType: string;
 }
 
 export class RelicFusionEngine {
   private synergyCalc = new SynergyCalculator();
   private achievementTracker = new AchievementTracker();
+
+  evolveRelic(relic: Relic, opponentHistory: OpponentData[]): Relic {
+    const newTraits = [...relic.traits];
+    const loreFragments: string[] = [];
+
+    opponentHistory.forEach(opponent => {
+      if (opponent.faction === "Oistarian") newTraits.push("Phase Echo");
+      if (opponent.usedRelicType === "Crystal") newTraits.push("Prism Memory");
+
+      loreFragments.push(`Faced ${opponent.name} in the Rift. Echoes of ${opponent.faction} linger.`);
+    });
+
+    return {
+      ...relic,
+      traits: Array.from(new Set(newTraits)),
+      lore: LoreComposer.appendLore(relic, loreFragments),
+      powerLevel: relic.powerLevel + (opponentHistory.length * 2)
+    };
+  }
 
   initiateFusion(a: Relic, b: Relic): { relic: Relic; achievement: string | null } {
     const synergy = this.synergyCalc.calculateSynergy(a, b);

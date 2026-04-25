@@ -10,6 +10,7 @@ import { PointerLockControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { useGameStore } from '../store';
 import { soundManager } from '../lib/sounds';
+import { HealthBar } from './HealthBar';
 
 const SPEED = 12;
 const MAX_LASER_DIST = 100;
@@ -19,6 +20,8 @@ export function Player() {
   const { camera } = useThree();
   const { rapier, world } = useRapier();
   
+  const playerHealth = useGameStore(state => state.playerHealth);
+  const playerMaxHealth = useGameStore(state => state.playerMaxHealth);
   const playerState = useGameStore(state => state.playerState);
   const gameState = useGameStore(state => state.gameState);
   const addLaser = useGameStore(state => state.addLaser);
@@ -340,7 +343,8 @@ export function Player() {
     if (direction.lengthSq() > 0) {
       // Clamp length to 1 to prevent faster diagonal movement if both inputs active (though rare)
       if (direction.lengthSq() > 1) direction.normalize();
-      direction.multiplyScalar(SPEED * selectedLegend.speed);
+      // Scale speed: 70 is baseline 1.0 multiplier
+      direction.multiplyScalar(SPEED * (selectedLegend.stats.speed / 70));
     }
 
     body.current.setLinvel({ x: direction.x, y: velocity.y, z: direction.z }, true);
@@ -471,6 +475,13 @@ export function Player() {
         friction={0}
       >
         <CapsuleCollider args={[0.5, 0.5]} position={[0, 1, 0]} friction={0} />
+        {playerState === 'active' && (
+          <HealthBar 
+            current={playerHealth} 
+            max={playerMaxHealth} 
+            position={[0, 2.5, 0]} 
+          />
+        )}
       </RigidBody>
 
       {/* First Person Tactical Emitter */}
