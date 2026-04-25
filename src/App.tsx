@@ -651,6 +651,60 @@ export default function App() {
               </button>
             </div>
 
+            {/* Mission Selection */}
+            <div className="w-full mb-20 pointer-events-auto">
+              <h3 className="text-cyan-500/30 text-[10px] font-bold uppercase tracking-[0.5em] mb-4 font-display text-center">Regional Command</h3>
+              <div className="flex flex-wrap justify-center gap-2 mb-8 border-b border-cyan-500/10 pb-6">
+                {Object.values(Region).map(r => (
+                  <button
+                    key={r}
+                    onClick={() => useGameStore.getState().setActiveRegion(r as Region)}
+                    className={`px-4 py-1.5 border text-[10px] font-black uppercase tracking-widest transition-all ${
+                      useGameStore.getState().activeRegion === r
+                      ? 'bg-cyan-500 text-black border-cyan-500 shadow-[0_0_15px_rgba(34,211,238,0.4)]'
+                      : 'bg-transparent text-cyan-900 border-cyan-900/30 hover:border-cyan-500/50'
+                    }`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+
+              <h3 className="text-cyan-500/30 text-[10px] font-bold uppercase tracking-[0.5em] mb-4 font-display text-center">Tactical Operations</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {MISSIONS.filter(m => m.region === useGameStore.getState().activeRegion).map((mission) => (
+                  <button
+                    key={mission.id}
+                    onClick={() => useGameStore.getState().setCurrentMission(mission)}
+                    className={`p-6 border text-left transition-all relative group ${
+                      useGameStore.getState().currentMission?.id === mission.id
+                      ? 'bg-cyan-500/10 border-cyan-400 shadow-[0_0_30px_rgba(34,211,238,0.1)]'
+                      : 'bg-black/40 border-cyan-900/30 hover:border-cyan-500/50'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-[10px] font-black text-cyan-500 uppercase tracking-tighter">{mission.region}</span>
+                      {useGameStore.getState().currentMission?.id === mission.id && <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(34,211,238,1)]" />}
+                    </div>
+                    <h4 className="text-lg font-black text-white uppercase tracking-tight mb-1 group-hover:text-cyan-400 transition-colors">{mission.title}</h4>
+                    <p className="text-[10px] text-cyan-100/40 leading-relaxed mb-4 h-8 line-clamp-2 italic">"{mission.description}"</p>
+                    <div className="flex flex-wrap gap-2">
+                       {mission.objectives.map((obj, i) => (
+                         <div key={i} className="text-[8px] bg-cyan-950/60 text-cyan-400/70 px-2 py-0.5 border border-cyan-500/20 uppercase font-black tracking-widest leading-none">
+                           {obj}
+                         </div>
+                       ))}
+                    </div>
+                  </button>
+                ))}
+                {MISSIONS.filter(m => m.region === useGameStore.getState().activeRegion).length === 0 && (
+                  <div className="col-span-full py-12 text-center border border-dashed border-cyan-900/20 text-cyan-900 text-xs uppercase font-black tracking-widest">
+                    No active operations detected in this sector
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Elite Backers Section */}
             <div className="w-full mb-32 font-accent">
               <h3 className="text-cyan-400 text-xs font-bold uppercase tracking-[0.4em] mb-12 flex items-center gap-4 justify-center font-display">

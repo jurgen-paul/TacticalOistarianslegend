@@ -35,9 +35,23 @@ export interface SquadMember {
   status: "Active" | "Wounded" | "Compromised";
 }
 
+export enum Region {
+  MiddleEast = 'Middle East',
+  Europe = 'Europe',
+  SouthAmerica = 'South America',
+  Gaza = 'Gaza',
+  Israel = 'Israel'
+}
+
+export interface Trigger {
+  condition: (state: GameStore) => boolean;
+  effect: (state: GameStore) => void | Partial<GameStore>;
+}
+
 export interface Mission {
   id: string;
   title: string;
+  region: Region;
   description: string;
   location?: string;
   objectives: string[];
@@ -52,6 +66,7 @@ export const MISSIONS: Mission[] = [
   {
     id: 'eden_surge',
     title: 'Vault Protocol: Eden Surge',
+    region: Region.Israel,
     description: 'Navigate the pulse-reactive corridors of the Eden Vault and extract the Surge Protocol.',
     location: 'Eden Vault - Subterranean Memory Core',
     objectives: [
@@ -95,23 +110,34 @@ export const MISSIONS: Mission[] = [
     }
   },
   {
-    id: "vault_breathes",
-    title: "THE VAULT BREATHES",
-    description: "Navigate the pulse-reactive corridors of the Eden Vault.",
-    objectives: ["Navigate corridors", "Disable AI sentinels"],
-    environment: "Pulse-reactive corridors",
-    enemies: ["ghost", "standard"],
-    triggers: {
-      betrayal: {
-        condition: (state) => state.trustScore < 60,
-        effect: (state) => {
-          const squad = state.squad.map(m => 
-            m.name === "Echo Vanguard" ? { ...m, status: "Compromised" as const } : m
-          );
-          return { squad };
-        }
-      }
-    }
+    id: "urban_ops_gaza",
+    title: "URBAN OPS: SHADOW SECTOR",
+    region: Region.Gaza,
+    description: "High-density urban reconnaissance and asset extraction in the Shadow Sector.",
+    objectives: ["Locate lost uplink", "Avoid civilian detection", "Exfiltrate via roof"],
+    environment: "Dense Urban / Ruins",
+    enemies: ["standard", "scout"],
+    triggers: {}
+  },
+  {
+    id: "desert_haze",
+    title: "DESERT HAZE",
+    region: Region.MiddleEast,
+    description: "Long-range engagement in open desert terrain. Beware of sandstorms and extreme heat mirages.",
+    objectives: ["Neutralize scout outposts", "Capture fuel relay"],
+    environment: "Desert / Open Plains",
+    enemies: ["sniper", "scout"],
+    triggers: {}
+  },
+  {
+    id: "jungle_extraction",
+    title: "AMAZONIAN RECOVERY",
+    region: Region.SouthAmerica,
+    description: "Infiltrate deep jungle facility to recover bio-growth data.",
+    objectives: ["Infiltrate facility", "Secure lab equipment"],
+    environment: "Dense Rainforest",
+    enemies: ["ghost", "tank"],
+    triggers: {}
   }
 ];
 
@@ -614,9 +640,11 @@ interface GameStore {
   moralityScore: number;
   squad: SquadMember[];
   currentMission: Mission | null;
+  activeRegion: Region;
   activeVoiceLines: VoiceLine[];
   setTrustScore: (score: number) => void;
   setMoralityScore: (score: number) => void;
+  setActiveRegion: (region: Region) => void;
   addVoiceLine: (speaker: string, line: string) => void;
   checkTriggers: () => void;
 
@@ -778,10 +806,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     { name: "Oistarian", morale: 90, status: "Active" }
   ],
   currentMission: MISSIONS[0],
+  activeRegion: Region.Israel,
   activeVoiceLines: [],
 
   setTrustScore: (trustScore) => set({ trustScore }),
   setMoralityScore: (moralityScore) => set({ moralityScore }),
+  setActiveRegion: (activeRegion) => set({ activeRegion }),
   
   addVoiceLine: (speaker, line) => set(state => ({
     activeVoiceLines: [{ id: Math.random().toString(), speaker, line, timestamp: Date.now() }, ...state.activeVoiceLines].slice(0, 3)

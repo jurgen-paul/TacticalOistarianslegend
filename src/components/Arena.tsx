@@ -8,7 +8,7 @@ import { Grid, Stars, Float } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef, useState, useEffect } from 'react';
 import * as THREE from 'three';
-import { ENEMY_SPAWN_POINTS, useGameStore } from '../store';
+import { ENEMY_SPAWN_POINTS, useGameStore, Region } from '../store';
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(() => {
@@ -96,6 +96,18 @@ export function Arena() {
     return obs;
   }, [isMobile]);
 
+  const activeRegion = useGameStore(state => state.currentMission?.region);
+
+  const regionColors = {
+    [Region.MiddleEast]: "#ffaa00", // Orange/Desert
+    [Region.Europe]: "#0088ff",     // Blue/City
+    [Region.SouthAmerica]: "#00ff44", // Green/Jungle
+    [Region.Gaza]: "#aaaaaa",      // Grey/Urban
+    [Region.Israel]: "#00ffff"      // Cyan/Vault
+  };
+
+  const activeColor = activeRegion ? regionColors[activeRegion] : "#00ffff";
+
   return (
     <group>
       {/* Floor */}
@@ -105,7 +117,7 @@ export function Arena() {
           <meshStandardMaterial color="#050510" roughness={0.2} metalness={0.8} />
         </mesh>
       </RigidBody>
-      <Grid position={[0, -0.49, 0]} args={[200, 200]} cellColor="#00ffff" sectionColor="#ffffff" fadeDistance={100} cellThickness={0.2} sectionThickness={1.0} />
+      <Grid position={[0, -0.49, 0]} args={[200, 200]} cellColor={activeColor} sectionColor="#ffffff" fadeDistance={100} cellThickness={0.2} sectionThickness={1.0} />
       <ResonanceGrid />
 
       {/* Spawn Points Visualization */}
