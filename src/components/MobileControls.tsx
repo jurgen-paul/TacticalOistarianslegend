@@ -102,10 +102,11 @@ function Joystick({ onMove, className, label }: JoystickProps) {
 export function MobileControls() {
   const setMobileInput = useGameStore(state => state.setMobileInput);
   const [shooting, setShooting] = useState(false);
+  const [aiming, setAiming] = useState(false);
 
   useEffect(() => {
-    setMobileInput({ shooting });
-  }, [shooting, setMobileInput]);
+    setMobileInput({ shooting, aiming });
+  }, [shooting, aiming, setMobileInput]);
 
   return (
     <div className="absolute inset-0 pointer-events-none z-50 flex flex-col justify-end pb-12 px-4 select-none">
@@ -116,25 +117,49 @@ export function MobileControls() {
           onMove={(x, y) => setMobileInput({ move: { x, y } })} 
         />
 
-        {/* Shoot Button */}
-        <button
-          className={`w-20 h-20 rounded-full border-4 border-fuchsia-500 flex items-center justify-center mb-2 active:scale-95 transition-all touch-none ${shooting ? 'bg-fuchsia-500/50 scale-95' : 'bg-fuchsia-500/20'}`}
-          onPointerDown={(e) => {
-            e.currentTarget.setPointerCapture(e.pointerId);
-            setShooting(true);
-          }}
-          onPointerUp={(e) => {
-            e.currentTarget.releasePointerCapture(e.pointerId);
-            setShooting(false);
-          }}
-          onPointerCancel={(e) => {
-            e.currentTarget.releasePointerCapture(e.pointerId);
-            setShooting(false);
-          }}
-          style={{ touchAction: 'none' }}
-        >
-          <div className="w-12 h-12 bg-fuchsia-500 rounded-full shadow-[0_0_15px_rgba(232,121,249,0.8)]" />
-        </button>
+        <div className="flex flex-col gap-2 mb-2">
+          {/* Aim Button */}
+          <button
+            className={`w-16 h-16 rounded-full border-4 border-cyan-500 flex items-center justify-center active:scale-95 transition-all touch-none ${aiming ? 'bg-cyan-500/50 scale-95' : 'bg-cyan-500/20'}`}
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              setAiming(true);
+            }}
+            onPointerUp={(e) => {
+              e.currentTarget.releasePointerCapture(e.pointerId);
+              setAiming(false);
+            }}
+            onPointerCancel={(e) => {
+              e.currentTarget.releasePointerCapture(e.pointerId);
+              setAiming(false);
+            }}
+            style={{ touchAction: 'none' }}
+          >
+            <div className="w-8 h-8 border-2 border-cyan-400 rounded-sm rotate-45 flex items-center justify-center">
+               <div className="w-1 h-1 bg-cyan-400 rounded-full" />
+            </div>
+          </button>
+
+          {/* Shoot Button */}
+          <button
+            className={`w-20 h-20 rounded-full border-4 border-fuchsia-500 flex items-center justify-center active:scale-95 transition-all touch-none ${shooting ? 'bg-fuchsia-500/50 scale-95' : 'bg-fuchsia-500/20'}`}
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              setShooting(true);
+            }}
+            onPointerUp={(e) => {
+              e.currentTarget.releasePointerCapture(e.pointerId);
+              setShooting(false);
+            }}
+            onPointerCancel={(e) => {
+              e.currentTarget.releasePointerCapture(e.pointerId);
+              setShooting(false);
+            }}
+            style={{ touchAction: 'none' }}
+          >
+            <div className="w-12 h-12 bg-fuchsia-500 rounded-full shadow-[0_0_15px_rgba(232,121,249,0.8)]" />
+          </button>
+        </div>
 
         {/* Right Stick - Look */}
         <Joystick 

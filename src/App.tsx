@@ -712,7 +712,7 @@ export default function App() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
               {/* Weapon Selection First */}
               <div className="flex flex-col gap-4">
                 <h3 className="text-cyan-400 text-[10px] font-bold uppercase tracking-widest bg-cyan-900/20 p-2 border-l-2 border-cyan-400">Weapon Chassis</h3>
@@ -773,6 +773,39 @@ export default function App() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Weapon Stats Summary */}
+            <div className="bg-cyan-950/20 border border-cyan-500/20 p-6 rounded-sm mb-8 flex flex-col md:flex-row gap-8 items-center justify-around">
+              <div className="flex flex-col items-center">
+                <div className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest mb-1">Damage</div>
+                <div className="text-3xl font-black text-white font-display uppercase">{selectedWeapon.baseDamage}</div>
+                <div className="text-[8px] text-cyan-400/50 font-bold uppercase">Plasma Burst</div>
+              </div>
+              <div className="w-px h-12 bg-cyan-500/20 hidden md:block" />
+              <div className="flex flex-col items-center">
+                <div className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest mb-1">Fire Rate</div>
+                <div className="text-3xl font-black text-white font-display uppercase">
+                  {(1000 / (selectedWeapon.fireRate * (1 - (weaponAttachments.barrel.stats.fireRateBoost || 0)))).toFixed(1)}/s
+                </div>
+                <div className="text-[8px] text-cyan-400/50 font-bold uppercase">Cycle Speed</div>
+              </div>
+              <div className="w-px h-12 bg-cyan-500/20 hidden md:block" />
+              <div className="flex flex-col items-center">
+                <div className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest mb-1">Stability</div>
+                <div className="text-3xl font-black text-white font-display uppercase">
+                  {(100 * (1 - (selectedWeapon.recoil * (1 - (weaponAttachments.grip.stats.recoilReduction || 0))))).toFixed(0)}%
+                </div>
+                <div className="text-[8px] text-cyan-400/50 font-bold uppercase">Recoil Control</div>
+              </div>
+              <div className="w-px h-12 bg-cyan-500/20 hidden md:block" />
+              <div className="flex flex-col items-center">
+                <div className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest mb-1">Effective Range</div>
+                <div className="text-3xl font-black text-white font-display uppercase">
+                  {30 + (weaponAttachments.barrel.stats.rangeBoost || 0)}
+                </div>
+                <div className="text-[8px] text-cyan-400/50 font-bold uppercase">Beam Stability</div>
+              </div>
             </div>
 
             {/* Settings Section */}

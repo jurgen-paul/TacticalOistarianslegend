@@ -270,6 +270,17 @@ export function Player() {
       }
     }
 
+    // Combine keyboard and joystick input
+    // ...
+    
+    // Sync ADS with mobile aiming
+    if (isTouchDevice.current) {
+      if (mobileInput.aiming !== adsActive) {
+        setAdsActive(mobileInput.aiming);
+        isAiming.current = mobileInput.aiming;
+      }
+    }
+
     // Movement
     const velocity = body.current.linvel();
     
@@ -354,7 +365,7 @@ export function Player() {
     }
 
     // Subtle Aim Assist for Mobile
-    if (isTouchDevice.current && gameState === 'playing' && playerState === 'active') {
+    if (isTouchDevice.current && mobileInput.aiming && gameState === 'playing' && playerState === 'active') {
       const enemies = useGameStore.getState().enemies;
       let bestTarget: THREE.Vector3 | null = null;
       let minAngle = 0.15; // Sticky radius (radians)

@@ -74,6 +74,7 @@ export interface LegendData {
   speed: number;
   dashCooldown: number;
   abilityCooldown: number;
+  abilityDuration?: number;
   specialAbility: 'emp' | 'overdrive' | 'stealth' | 'shield' | 'jamming' | 'breach';
   rarity: 'common' | 'rare' | 'epic';
 }
@@ -186,6 +187,117 @@ export const LEGENDS: LegendData[] = [
     speed: 0.85,
     dashCooldown: 3000,
     abilityCooldown: 20000,
+    specialAbility: 'shield',
+    rarity: 'epic'
+  },
+  {
+    id: 'cohen',
+    name: 'Eli Cohen',
+    description: 'Combat Engineer. Specialist in field construction and signal jamming fortifications.',
+    speed: 1.0,
+    dashCooldown: 2000,
+    abilityCooldown: 15000,
+    specialAbility: 'jamming',
+    rarity: 'rare'
+  },
+  {
+    id: 'avraham',
+    name: 'Ben Avraham',
+    description: 'Underwater Engineer. Expert in maritime infiltration and high-pressure salvage.',
+    speed: 1.1,
+    dashCooldown: 1800,
+    abilityCooldown: 12000,
+    specialAbility: 'stealth',
+    rarity: 'rare'
+  },
+  {
+    id: 'mor',
+    name: 'Eliya Mor',
+    description: 'Medical Logistics & Triage. Expert in field evacuation planning and supply routing.',
+    speed: 1.1,
+    dashCooldown: 1800,
+    abilityCooldown: 14000,
+    specialAbility: 'shield',
+    rarity: 'rare'
+  },
+  {
+    id: 'rosenfeld',
+    name: 'Hannah Rosenfeld',
+    description: 'Sniper & Overwatch. Precision marksman specialized in waterline concealment and long-range optics.',
+    speed: 1.0,
+    dashCooldown: 2200,
+    abilityCooldown: 16000,
+    specialAbility: 'stealth',
+    rarity: 'epic'
+  },
+  {
+    id: 'farouk',
+    name: 'Leila Farouk',
+    description: 'Sniper/Spotter. Precision shooter with advanced camouflage specialties and long-range metrics.',
+    speed: 1.0,
+    dashCooldown: 2200,
+    abilityCooldown: 16000,
+    specialAbility: 'stealth',
+    rarity: 'rare'
+  },
+  {
+    id: 'hadid',
+    name: 'Noor Hadid',
+    description: 'Diver & EOD Technician. Specialist in underwater breaching and explosive ordnance neutralization.',
+    speed: 1.1,
+    dashCooldown: 1700,
+    abilityCooldown: 13000,
+    specialAbility: 'breach',
+    rarity: 'epic'
+  },
+  {
+    id: 'qadri',
+    name: 'Omar Qadri',
+    description: 'RSO (Range Safety Officer). Former range master, calm under pressure. Expert in safety protocols and supervised field operations.',
+    speed: 1.0,
+    dashCooldown: 2000,
+    abilityCooldown: 16000,
+    specialAbility: 'shield',
+    rarity: 'rare'
+  },
+  {
+    id: 'saban',
+    name: 'Raya Saban',
+    description: 'Diver Captain & Mobility Lead. Experienced dive team lead specializing in team safety and surface-swim logistics.',
+    speed: 1.4,
+    dashCooldown: 1200,
+    abilityCooldown: 14000,
+    specialAbility: 'overdrive',
+    rarity: 'epic'
+  },
+  {
+    id: 'ben_ami',
+    name: 'Sara Ben-Ami',
+    description: 'Combat Medic. Marines medical corps veteran with expertise in rapid-water extraction and field medevac.',
+    speed: 1.1,
+    dashCooldown: 1800,
+    abilityCooldown: 15000,
+    specialAbility: 'shield',
+    rarity: 'rare'
+  },
+  {
+    id: 'rubin',
+    name: 'Yonina Rubin',
+    description: 'EOD Specialist. Expert in underwater explosives risk and remote detonation protocols.',
+    speed: 0.95,
+    dashCooldown: 2200,
+    abilityCooldown: 18000,
+    specialAbility: 'breach',
+    rarity: 'epic'
+  },
+  {
+    id: 'petrova',
+    name: 'Anya Petrova',
+    description: 'Former elite guard with enhanced defensive capabilities. Operates with advanced Kinetic Barrier technology.',
+    speed: 1.0,
+    dashCooldown: 2000,
+    abilityCooldown: 15000,
+    abilityDuration: 5000,
     specialAbility: 'shield',
     rarity: 'epic'
   }
@@ -436,11 +548,13 @@ interface GameStore {
     move: { x: number, y: number };
     look: { x: number, y: number };
     shooting: boolean;
+    aiming: boolean;
   };
   setMobileInput: (input: Partial<{
     move: { x: number, y: number };
     look: { x: number, y: number };
     shooting: boolean;
+    aiming: boolean;
   }>) => void;
 }
 
@@ -591,7 +705,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   mobileInput: {
     move: { x: 0, y: 0 },
     look: { x: 0, y: 0 },
-    shooting: false
+    shooting: false,
+    aiming: false
   },
 
   setMobileInput: (input) => set((state) => ({
@@ -985,7 +1100,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       soundManager.play('ready', 0.5);
       return {
         empCooldown: now + state.selectedLegend.abilityCooldown,
-        overdriveActiveUntil: now + 5000,
+        overdriveActiveUntil: now + (state.selectedLegend.abilityDuration || 5000),
         empReadyNotified: false,
         events: [...state.events, { id: Math.random().toString(), message: "OVERDRIVE SYSTEM ENGAGED", timestamp: now }]
       };
@@ -995,7 +1110,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       soundManager.play('ready', 0.4);
       return {
         empCooldown: now + state.selectedLegend.abilityCooldown,
-        stealthActiveUntil: now + 8000,
+        stealthActiveUntil: now + (state.selectedLegend.abilityDuration || 8000),
         empReadyNotified: false,
         events: [...state.events, { id: Math.random().toString(), message: "CLOAKING ENGAGED", timestamp: now }]
       };
@@ -1003,11 +1118,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     if (ability === 'shield') {
       soundManager.play('ready', 0.6);
+      const isAnya = state.selectedLegend.id === 'petrova';
       return {
         empCooldown: now + state.selectedLegend.abilityCooldown,
-        shieldActiveUntil: now + 6000,
+        shieldActiveUntil: now + (state.selectedLegend.abilityDuration || 6000),
         empReadyNotified: false,
-        events: [...state.events, { id: Math.random().toString(), message: "KINETIC SHIELD DEPLOYED", timestamp: now }]
+        events: [...state.events, { id: Math.random().toString(), message: isAnya ? "KINETIC BARRIER DEPLOYED" : "KINETIC SHIELD DEPLOYED", timestamp: now }]
       };
     }
 
@@ -1015,7 +1131,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       soundManager.play('alert', 0.5);
       return {
         empCooldown: now + state.selectedLegend.abilityCooldown,
-        breachActiveUntil: now + 4000,
+        breachActiveUntil: now + (state.selectedLegend.abilityDuration || 4000),
         empReadyNotified: false,
         events: [...state.events, { id: Math.random().toString(), message: "BREACH PROTOCOL INITIATED", timestamp: now }]
       };
@@ -1024,7 +1140,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Default to EMP or Jamming
     soundManager.play('emp', 0.7);
     const empRange = ability === 'jamming' ? 60 : 30;
-    const duration = ability === 'jamming' ? 8000 : 5000;
+    const duration = state.selectedLegend.abilityDuration || (ability === 'jamming' ? 8000 : 5000);
 
     const enemies = state.enemies.map(e => {
       const dist = Math.sqrt(
@@ -1041,7 +1157,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       enemies, 
       empCooldown: now + state.selectedLegend.abilityCooldown, 
       empActiveUntil: now + 500,
-      jammingActiveUntil: ability === 'jamming' ? now + 8000 : 0,
+      jammingActiveUntil: ability === 'jamming' ? now + duration : 0,
       empReadyNotified: false,
       events: [...state.events, { id: Math.random().toString(), message: ability === 'jamming' ? "COMMUNICS JAMMED" : "EMP BLAST ACTIVATED", timestamp: now }]
     };
