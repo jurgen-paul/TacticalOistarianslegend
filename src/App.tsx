@@ -4,12 +4,16 @@
 */
 
 import { useEffect, useState, useMemo } from 'react';
+import { motion } from 'motion/react';
 import { Game } from './components/Game';
 import { MobileControls } from './components/MobileControls';
-import { useGameStore, ATTACHMENTS, AttachmentType, Attachment, LEGENDS, WEAPONS } from './store';
+import { useGameStore, ATTACHMENTS, AttachmentType, Attachment, LEGENDS, WEAPONS, Region, MISSIONS } from './store';
 import { Relic } from './services/fusionEngine';
 import { RelicCodex } from './components/RelicCodex';
 import { Minimap } from './components/Minimap';
+import { PodcastPlayer } from './components/PodcastPlayer';
+import { AmbientHandler } from './components/AmbientHandler';
+import { SystemOverview } from './components/SystemOverview';
 import { getStrategicAdvice } from './lib/gemini';
 
 function HUD() {
@@ -38,6 +42,8 @@ function HUD() {
 
   const playerHealth = useGameStore(state => state.playerHealth);
   const playerMaxHealth = useGameStore(state => state.playerMaxHealth);
+  const activeSquadIndex = useGameStore(state => state.activeSquadIndex);
+  const switchSquadMember = useGameStore(state => state.switchSquadMember);
 
   const [showHitMarker, setShowHitMarker] = useState(false);
   const [showDamageFlash, setShowDamageFlash] = useState(false);
@@ -70,6 +76,19 @@ function HUD() {
     }
   }, [gameState, currentMission]);
 
+  useEffect(() => {
+    if (gameState !== 'playing') return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === '1') switchSquadMember(0);
+      if (e.key === '2') switchSquadMember(1);
+      if (e.key === '3') switchSquadMember(2);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [gameState, switchSquadMember]);
+
   const leaderboard = useMemo(() => {
     const players = [
       { id: 'You', score: score, isMe: true },
@@ -85,16 +104,17 @@ function HUD() {
   return (
     <>
       {/* NPC/Dialogue Overlay */}
-      <div className="absolute bottom-32 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 pointer-events-none z-20">
+      <div className="absolute bottom-32 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 pointer-events-none z-20 w-full max-w-[90vw] md:max-w-lg">
         {activeVoiceLines.map((v, i) => (
-          <div 
+          <motion.div 
             key={v.id} 
-            className="bg-black/60 border-l-2 border-cyan-400 p-3 max-w-lg backdrop-blur-md animate-in fade-in slide-in-from-bottom-4 duration-500"
-            style={{ opacity: 1 - (i * 0.3) }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1 - (i * 0.3), y: 0 }}
+            className="bg-black/80 border-l-2 border-cyan-400 p-3 w-full backdrop-blur-md shadow-[0_0_20px_rgba(34,211,238,0.1)]"
           >
             <div className="text-[10px] text-cyan-400 font-black uppercase tracking-[0.2em] mb-1">{v.speaker}</div>
             <div className="text-sm text-cyan-100/90 leading-tight font-accent italic">"{v.line}"</div>
-          </div>
+          </motion.div>
         ))}
       </div>
 
@@ -217,10 +237,15 @@ function HUD() {
       </div>
       
       {/* HUD Top Center - Objectives */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3 pointer-events-none">
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3 pointer-events-none w-full max-w-[80vw] md:max-w-md">
         {objectives.map(obj => (
-          <div key={obj.id} className="flex flex-col items-center gap-1 bg-black/20 p-2 rounded-sm backdrop-blur-[2px] border border-cyan-500/5">
-            <div className="flex items-center gap-3">
+          <motion.div 
+            key={obj.id} 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col items-center gap-1 bg-black/40 p-2 rounded-sm backdrop-blur-md border border-cyan-500/20 w-full"
+          >
+            <div className="flex items-center justify-between w-full gap-3 px-2">
               <div className={`text-[10px] font-bold tracking-widest uppercase flex items-center gap-2 ${obj.isBeingCaptured ? 'text-cyan-400 animate-pulse' : 'text-cyan-400/60'}`}>
                 {obj.type === 'capture' && (
                   <div className={`w-2 h-2 rounded-full ${obj.controlledBy === 'player' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]' : 'bg-cyan-900'}`} />
@@ -228,18 +253,20 @@ function HUD() {
                 {obj.label}
               </div>
               
-              {obj.timer !== undefined && (
-                <div className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-sm ${obj.timer < 30 ? 'bg-red-500/20 text-red-500 animate-pulse' : 'bg-cyan-500/10 text-cyan-400'}`}>
-                  {Math.floor(obj.timer / 60)}:{(Math.floor(obj.timer) % 60).toString().padStart(2, '0')}
-                </div>
-              )}
+              <div className="flex items-center gap-3">
+                {obj.timer !== undefined && (
+                  <div className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-sm ${obj.timer < 30 ? 'bg-red-500/20 text-red-500 animate-pulse' : 'bg-cyan-500/10 text-cyan-400'}`}>
+                    {Math.floor(obj.timer / 60)}:{(Math.floor(obj.timer) % 60).toString().padStart(2, '0')}
+                  </div>
+                )}
 
-              <div className="text-[10px] font-mono text-cyan-400/40">
-                {Math.floor(obj.progress)}%
+                <div className="text-[10px] font-mono text-cyan-400/40">
+                  {Math.floor(obj.progress)}%
+                </div>
               </div>
             </div>
             
-            <div className="w-56 h-1 bg-cyan-900/20 rounded-full overflow-hidden border border-cyan-500/10 relative">
+            <div className="w-full h-1 bg-cyan-900/20 rounded-full overflow-hidden border border-cyan-500/10 relative">
               <div 
                 className={`h-full transition-all duration-300 ${obj.controlledBy === 'player' ? 'bg-green-400' : (obj.progress >= 100 ? 'bg-green-400/50' : 'bg-cyan-400')}`}
                 style={{ width: `${obj.progress}%` }} 
@@ -249,17 +276,19 @@ function HUD() {
               )}
             </div>
             
-            {obj.type === 'capture' && (
-              <div className={`text-[8px] font-bold uppercase tracking-[0.2em] ${obj.controlledBy === 'player' ? 'text-green-500/50' : 'text-cyan-900'}`}>
-                {obj.controlledBy === 'player' ? 'Sector Secured' : 'Unclaimed Sector'}
-              </div>
-            )}
-            {obj.type === 'payload' && (
-              <div className="text-[8px] text-cyan-500/50 font-bold uppercase tracking-[0.2em]">
-                {obj.progress >= 100 ? 'Payload Delivered' : 'Escort in Progress'}
-              </div>
-            )}
-          </div>
+            <div className="flex justify-between w-full px-2">
+              {obj.type === 'capture' && (
+                <div className={`text-[8px] font-bold uppercase tracking-[0.2em] ${obj.controlledBy === 'player' ? 'text-green-500/50' : 'text-cyan-900'}`}>
+                  {obj.controlledBy === 'player' ? 'Sector Secured' : 'Unclaimed Sector'}
+                </div>
+              )}
+              {obj.type === 'payload' && (
+                <div className="text-[8px] text-cyan-500/50 font-bold uppercase tracking-[0.2em]">
+                  {obj.progress >= 100 ? 'Payload Delivered' : 'Escort in Progress'}
+                </div>
+              )}
+            </div>
+          </motion.div>
         ))}
       </div>
 
@@ -300,18 +329,37 @@ function HUD() {
             </div>
 
             {/* Squad Pulse */}
-            <div className="bg-black/40 border-r-2 border-cyan-900/30 p-2 backdrop-blur-sm w-64 space-y-2">
-              {squad.map(member => (
-                <div key={member.name} className="flex justify-between items-center">
+            <div className="bg-black/40 border-r-2 border-cyan-900/30 p-2 backdrop-blur-sm w-64 space-y-2 pointer-events-auto">
+              <div className="text-[8px] font-black text-cyan-600 uppercase tracking-widest mb-1 text-center">Active Squad Control</div>
+              {squad.map((member, index) => (
+                <div 
+                  key={member.name} 
+                  className={`flex justify-between items-center p-1.5 border transition-all cursor-pointer relative overflow-hidden ${
+                    activeSquadIndex === index ? 'bg-cyan-500/10 border-cyan-500/40 shadow-[0_0_15px_rgba(34,211,238,0.1)]' : 'border-transparent hover:bg-white/5 hover:border-cyan-500/10'
+                  }`}
+                  onClick={() => switchSquadMember(index)}
+                >
+                  {activeSquadIndex === index && (
+                    <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-cyan-400" />
+                  )}
                   <div className="flex flex-col">
-                    <div className="text-[9px] text-cyan-100/70 font-black uppercase tracking-widest">{member.name}</div>
-                    <div className={`text-[7px] font-bold uppercase ${member.status === 'Compromised' ? 'text-red-500' : 'text-cyan-500'}`}>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[7px] font-bold ${activeSquadIndex === index ? 'text-cyan-400' : 'text-cyan-900'}`}>{index + 1}</span>
+                      <div className={`text-[9px] font-black uppercase tracking-widest truncate w-28 ${activeSquadIndex === index ? 'text-white' : 'text-cyan-100/50'}`}>
+                        {member.name}
+                      </div>
+                    </div>
+                    <div className={`text-[7px] font-bold uppercase flex items-center gap-1 ${member.status === 'Compromised' ? 'text-red-500' : (activeSquadIndex === index ? 'text-cyan-400' : 'text-cyan-700')}`}>
                       {member.status}
+                      {activeSquadIndex === index && <div className="w-1 h-1 bg-cyan-400 rounded-full animate-pulse" />}
                     </div>
                   </div>
                   <div className="flex gap-0.5">
                     {[...Array(5)].map((_, i) => (
-                      <div key={i} className={`w-1.5 h-3 ${i < Math.floor(member.morale / 20) ? 'bg-cyan-400' : 'bg-cyan-950'}`} />
+                      <div 
+                        key={i} 
+                        className={`w-1.5 h-3 ${i < Math.floor(member.morale / 20) ? (activeSquadIndex === index ? 'bg-cyan-400 shadow-[0_0_5px_rgba(34,211,238,0.5)]' : 'bg-cyan-500/60') : 'bg-cyan-950/40'}`} 
+                      />
                     ))}
                   </div>
                 </div>
@@ -330,7 +378,7 @@ function HUD() {
         <div className="flex gap-2">
           <button
             onClick={leaveGame}
-            className="px-3 py-1.5 bg-red-500/5 border border-red-500/40 text-red-500 text-[10px] font-bold tracking-widest rounded-sm hover:bg-red-500 hover:text-black transition-all duration-200 uppercase"
+            className="px-3 py-1.5 bg-red-500/5 border border-red-500/40 text-red-500 text-[10px] font-bold tracking-widest rounded-sm hover:bg-red-500 hover:text-black hover:scale-105 active:scale-95 transition-all duration-200 uppercase shadow-[0_0_10px_rgba(239,68,68,0.1)]"
           >
             Abort
           </button>
@@ -444,6 +492,8 @@ export default function App() {
   const setWeapon = useGameStore(state => state.setWeapon);
   const isMobile = useIsMobile();
   const [showCustomization, setShowCustomization] = useState(false);
+  const [showPodcast, setShowPodcast] = useState(false);
+  const [showArchitecture, setShowArchitecture] = useState(false);
   const [aiAdvice, setAiAdvice] = useState<string | null>(null);
   const [isConsulting, setIsConsulting] = useState(false);
   const [showFusionLab, setShowFusionLab] = useState(false);
@@ -475,6 +525,7 @@ export default function App() {
 
   return (
     <div className="w-screen h-screen bg-black relative overflow-hidden font-mono select-none">
+      <AmbientHandler />
       {/* 3D Canvas */}
       <div className="absolute inset-0">
         <Game />
@@ -506,6 +557,9 @@ export default function App() {
       )}
 
       {/* Menus */}
+      {showPodcast && <PodcastPlayer onClose={() => setShowPodcast(false)} />}
+      {showArchitecture && <SystemOverview onClose={() => setShowArchitecture(false)} />}
+      
       {gameState === 'menu' && (
         <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center z-10 pointer-events-auto">
           <div className="flex flex-col items-center w-full max-w-4xl max-h-[85vh] overflow-y-auto px-4 py-8 custom-scrollbar">
@@ -630,22 +684,38 @@ export default function App() {
             <div className="flex flex-col gap-6 w-80 mb-20 font-accent">
               <button
                 onClick={() => startGame()}
-                className="w-full px-8 py-4 bg-cyan-500/10 border-2 border-cyan-400 text-cyan-400 text-xl font-bold rounded-sm hover:bg-cyan-400 hover:text-black transition-all duration-300 shadow-[0_0_20px_rgba(34,211,238,0.3)] group relative overflow-hidden font-display"
+                className="w-full px-8 py-4 bg-cyan-500/10 border-2 border-cyan-400 text-cyan-400 text-xl font-bold rounded-sm hover:bg-cyan-400 hover:text-black hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-[0_0_20px_rgba(34,211,238,0.3)] group relative overflow-hidden font-display"
               >
-                <span className="relative z-10">INITIALIZE DEPLOYMENT</span>
+                <span className="relative z-10 transition-colors duration-300">INITIALIZE DEPLOYMENT</span>
                 <div className="absolute inset-0 bg-cyan-400 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
               </button>
 
               <button
                 onClick={() => setShowCustomization(true)}
-                className="w-full px-8 py-3 bg-cyan-950/30 border border-cyan-500/50 text-cyan-400 text-sm font-bold rounded-sm hover:bg-cyan-500/20 transition-all duration-300 uppercase tracking-widest"
+                className="w-full px-8 py-3 bg-cyan-950/30 border border-cyan-500/50 text-cyan-400 text-sm font-bold rounded-sm hover:bg-cyan-500/20 hover:border-cyan-400 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 uppercase tracking-widest"
               >
                 Weapon Customization
               </button>
 
               <button
+                onClick={() => setShowPodcast(true)}
+                className="w-full px-8 py-3 bg-emerald-950/30 border border-emerald-500/50 text-emerald-400 text-sm font-bold rounded-sm hover:bg-emerald-500/20 hover:border-emerald-400 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 uppercase tracking-widest flex items-center justify-center gap-3 group"
+              >
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 group-hover:animate-ping" />
+                Podcast Archive
+              </button>
+
+              <button
+                onClick={() => setShowArchitecture(true)}
+                className="w-full px-8 py-3 bg-cyan-950/30 border border-cyan-500/50 text-cyan-400 text-sm font-bold rounded-sm hover:bg-cyan-500/20 hover:border-cyan-400 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 uppercase tracking-widest flex items-center justify-center gap-3 group"
+              >
+                <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 group-hover:animate-ping" />
+                Intelligence Hub
+              </button>
+
+              <button
                 onClick={() => setShowFusionLab(true)}
-                className="w-full px-8 py-3 bg-purple-950/30 border border-purple-500/50 text-purple-400 text-sm font-bold rounded-sm hover:bg-purple-500/20 transition-all duration-300 uppercase tracking-widest shadow-[0_0_15px_rgba(168,85,247,0.2)]"
+                className="w-full px-8 py-3 bg-purple-950/30 border border-purple-500/50 text-purple-400 text-sm font-bold rounded-sm hover:bg-purple-500/20 hover:border-purple-400 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 uppercase tracking-widest shadow-[0_0_15px_rgba(168,85,247,0.2)]"
               >
                 Relic Fusion Lab
               </button>
@@ -659,10 +729,10 @@ export default function App() {
                   <button
                     key={r}
                     onClick={() => useGameStore.getState().setActiveRegion(r as Region)}
-                    className={`px-4 py-1.5 border text-[10px] font-black uppercase tracking-widest transition-all ${
+                    className={`px-4 py-1.5 border text-[10px] font-black uppercase tracking-widest transition-all hover:scale-110 active:scale-95 ${
                       useGameStore.getState().activeRegion === r
-                      ? 'bg-cyan-500 text-black border-cyan-500 shadow-[0_0_15px_rgba(34,211,238,0.4)]'
-                      : 'bg-transparent text-cyan-900 border-cyan-900/30 hover:border-cyan-500/50'
+                      ? 'bg-cyan-500 text-black border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.4)]'
+                      : 'bg-transparent text-cyan-900 border-cyan-900/30 hover:border-cyan-500/50 hover:text-cyan-400'
                     }`}
                   >
                     {r}
@@ -676,10 +746,10 @@ export default function App() {
                   <button
                     key={mission.id}
                     onClick={() => useGameStore.getState().setCurrentMission(mission)}
-                    className={`p-6 border text-left transition-all relative group ${
+                    className={`p-6 border text-left transition-all relative group hover:scale-[1.02] active:scale-[0.98] ${
                       useGameStore.getState().currentMission?.id === mission.id
                       ? 'bg-cyan-500/10 border-cyan-400 shadow-[0_0_30px_rgba(34,211,238,0.1)]'
-                      : 'bg-black/40 border-cyan-900/30 hover:border-cyan-500/50'
+                      : 'bg-black/40 border-cyan-900/30 hover:border-cyan-400/50'
                     }`}
                   >
                     <div className="flex justify-between items-center mb-2">
@@ -761,7 +831,7 @@ export default function App() {
           <button
             id="start-button"
             onClick={() => startGame()}
-            className="px-8 py-4 bg-red-500/10 border-2 border-red-500 text-red-500 text-xl font-bold rounded-sm hover:bg-red-500 hover:text-black transition-all duration-300"
+            className="px-8 py-4 bg-red-500/10 border-2 border-red-500 text-red-500 text-xl font-bold rounded-sm hover:bg-red-500 hover:text-black hover:scale-105 active:scale-95 transition-all duration-300 shadow-[0_0_20px_rgba(239,68,68,0.2)] font-display"
           >
             RE-INITIALIZE SYSTEM
           </button>
@@ -932,19 +1002,19 @@ export default function App() {
                   <span className="text-[8px] text-cyan-500/50 font-bold uppercase tracking-widest mb-1">Select Profile</span>
                   <button 
                     onClick={() => consultAdvisor("Aggressive / Close Quarters")}
-                    className="px-4 py-2 bg-cyan-500/5 border border-cyan-500/20 text-cyan-400 text-[10px] font-bold uppercase tracking-widest hover:bg-cyan-500/20 transition-all"
+                    className="px-4 py-2 bg-cyan-500/5 border border-cyan-500/20 text-cyan-400 text-[10px] font-bold uppercase tracking-widest hover:bg-cyan-500/20 hover:border-cyan-400 hover:scale-105 active:scale-95 transition-all"
                   >
                     Aggressive
                   </button>
                   <button 
                     onClick={() => consultAdvisor("Defensive / Long Range")}
-                    className="px-4 py-2 bg-cyan-500/5 border border-cyan-500/20 text-cyan-400 text-[10px] font-bold uppercase tracking-widest hover:bg-cyan-500/20 transition-all"
+                    className="px-4 py-2 bg-cyan-500/5 border border-cyan-500/20 text-cyan-400 text-[10px] font-bold uppercase tracking-widest hover:bg-cyan-500/20 hover:border-cyan-400 hover:scale-105 active:scale-95 transition-all"
                   >
                     Defensive
                   </button>
                   <button 
                     onClick={() => consultAdvisor("Balanced / Versatile")}
-                    className="px-4 py-2 bg-cyan-500/5 border border-cyan-500/20 text-cyan-400 text-[10px] font-bold uppercase tracking-widest hover:bg-cyan-500/20 transition-all"
+                    className="px-4 py-2 bg-cyan-500/5 border border-cyan-500/20 text-cyan-400 text-[10px] font-bold uppercase tracking-widest hover:bg-cyan-500/20 hover:border-cyan-400 hover:scale-105 active:scale-95 transition-all"
                   >
                     Balanced
                   </button>
@@ -955,7 +1025,7 @@ export default function App() {
             <div className="mt-12 flex justify-center">
               <button
                 onClick={() => setShowCustomization(false)}
-                className="px-12 py-3 bg-cyan-500 text-black font-black uppercase tracking-widest hover:bg-white transition-colors duration-300"
+                className="px-12 py-3 bg-cyan-500 text-black font-black uppercase tracking-widest hover:bg-white hover:scale-105 active:scale-95 transition-all duration-300 shadow-[0_0_30px_rgba(34,211,238,0.4)]"
               >
                 Confirm Configuration
               </button>

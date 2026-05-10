@@ -31,6 +31,7 @@ export interface Trigger {
 
 export interface SquadMember {
   name: string;
+  legendId: string;
   morale: number;
   status: "Active" | "Wounded" | "Compromised";
 }
@@ -642,9 +643,12 @@ interface GameStore {
   currentMission: Mission | null;
   activeRegion: Region;
   activeVoiceLines: VoiceLine[];
+  activeSquadIndex: number;
   setTrustScore: (score: number) => void;
   setMoralityScore: (score: number) => void;
   setActiveRegion: (region: Region) => void;
+  setCurrentMission: (mission: Mission) => void;
+  switchSquadMember: (index: number) => void;
   addVoiceLine: (speaker: string, line: string) => void;
   checkTriggers: () => void;
 
@@ -802,9 +806,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
   trustScore: 100,
   moralityScore: 50,
   squad: [
-    { name: "Echo Vanguard", morale: 85, status: "Active" },
-    { name: "Oistarian", morale: 90, status: "Active" }
+    { name: "Maya Cohen", legendId: "ghost", morale: 85, status: "Active" },
+    { name: "Tal Levi", legendId: "storm", morale: 90, status: "Active" },
+    { name: "Liora Goldberg", legendId: "angel", morale: 92, status: "Active" }
   ],
+  activeSquadIndex: 0,
   currentMission: MISSIONS[0],
   activeRegion: Region.Israel,
   activeVoiceLines: [],
@@ -812,7 +818,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setTrustScore: (trustScore) => set({ trustScore }),
   setMoralityScore: (moralityScore) => set({ moralityScore }),
   setActiveRegion: (activeRegion) => set({ activeRegion }),
+  setCurrentMission: (currentMission) => set({ currentMission }),
   
+  switchSquadMember: (index) => set(state => {
+    if (index < 0 || index >= state.squad.length) return state;
+    const member = state.squad[index];
+    const legend = LEGENDS.find(l => l.id === member.legendId);
+    if (!legend) return state;
+    
+    soundManager.play('ready', 0.5);
+    const event = { id: Math.random().toString(), message: `SWITCHING TO ${member.name.toUpperCase()}`, timestamp: Date.now() };
+    
+    return { 
+      activeSquadIndex: index,
+      selectedLegend: legend,
+      playerHealth: legend.stats.health, 
+      playerMaxHealth: legend.stats.health,
+      events: [...state.events, event]
+    };
+  }),
+
   addVoiceLine: (speaker, line) => set(state => ({
     activeVoiceLines: [{ id: Math.random().toString(), speaker, line, timestamp: Date.now() }, ...state.activeVoiceLines].slice(0, 3)
   })),

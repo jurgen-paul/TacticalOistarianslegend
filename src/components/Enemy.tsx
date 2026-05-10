@@ -35,6 +35,7 @@ export function Enemy({ data }: { data: EnemyData }) {
   const lastAbilityTime = useRef(0);
   const patrolTarget = useRef(new THREE.Vector3());
   const lastPatrolChange = useRef(0);
+  const patrolWaitUntil = useRef(0);
   const state = useRef<'patrol' | 'chase'>('patrol');
   const lockStartTime = useRef<number | null>(null);
   const [isLocked, setIsLocked] = useState(false);
@@ -102,12 +103,16 @@ export function Enemy({ data }: { data: EnemyData }) {
       state.current = 'patrol';
       lockStartTime.current = null;
       setIsLocked(false);
+      
+      // Wider search range when losing target
+      const searchRange = data.type === 'ghost' ? 100 : 60;
       patrolTarget.current.set(
-        currentPos.x + (Math.random() - 0.5) * 40,
+        currentPos.x + (Math.random() - 0.5) * searchRange,
         currentPos.y,
-        currentPos.z + (Math.random() - 0.5) * 40
+        currentPos.z + (Math.random() - 0.5) * searchRange
       );
       lastPatrolChange.current = Date.now();
+      patrolWaitUntil.current = Date.now() + 1000 + Math.random() * 2000; // Pause briefly after losing sight
     }
 
     // Update Lock State
@@ -235,17 +240,45 @@ export function Enemy({ data }: { data: EnemyData }) {
     } else {
       // Patrol
       const now = Date.now();
-      // Change target if reached or if stuck
-      const patrolChangeInterval = data.type === 'scout' ? 2000 : 4000;
-      if (currentPos.distanceTo(patrolTarget.current) < 2 || now - lastPatrolChange.current > patrolChangeInterval) {
-        patrolTarget.current.set(
-          currentPos.x + (Math.random() - 0.5) * 60,
-          currentPos.y,
-          currentPos.z + (Math.random() - 0.5) * 60
-        );
-        lastPatrolChange.current = now;
+      
+      if (now < patrolWaitUntil.current) {
+        direction.set(0, 0, 0);
+      } else {
+        // Change target if reached or if stuck
+        const patrolChangeInterval = data.type === 'scout' ? 3000 : 6000;
+        const reachedTarget = currentPos.distanceTo(patrolTarget.current) < 2;
+        const timedOut = now - lastPatrolChange.current > patrolChangeInterval;
+
+        if (reachedTarget || timedOut) {
+          // Define range based on enemy type
+          let range = 60;
+          let waitTime = 1000 + Math.random() * 2000;
+
+          if (data.type === 'scout') {
+            range = 100;
+            waitTime = 500; // Scouts move more
+          } else if (data.type === 'tank') {
+            range = 30;
+            waitTime = 3000; // Tanks idle more
+          } else if (data.type === 'sniper') {
+            range = 40;
+            waitTime = 4000;
+          } else if (data.type === 'ghost') {
+            range = 120;
+            waitTime = 800; // Ghosts are erratic
+          }
+
+          patrolTarget.current.set(
+            currentPos.x + (Math.random() - 0.5) * range,
+            currentPos.y,
+            currentPos.z + (Math.random() - 0.5) * range
+          );
+          
+          lastPatrolChange.current = now;
+          patrolWaitUntil.current = now + waitTime;
+        }
+        direction.subVectors(patrolTarget.current, currentPos).normalize();
       }
-      direction.subVectors(patrolTarget.current, currentPos).normalize();
     }
 
     // Apply movement
