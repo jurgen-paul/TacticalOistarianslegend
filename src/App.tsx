@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useTransition } from 'react';
 import { motion } from 'motion/react';
+import { onAuthStateChanged } from 'firebase/auth';
 import { Game } from './components/Game';
 import { MobileControls } from './components/MobileControls';
 import { useGameStore, ATTACHMENTS, AttachmentType, Attachment, LEGENDS, WEAPONS, Region, MISSIONS } from './store';
@@ -16,6 +17,8 @@ import { AmbientHandler } from './components/AmbientHandler';
 import { SystemOverview } from './components/SystemOverview';
 import { CinemaStation } from './components/CinemaStation';
 import { getStrategicAdvice } from './lib/gemini';
+import { auth, signInWithGoogle, logOutUser, updateHighScoreInFirebase, submitLeaderboardEntry } from './services/firebase';
+import Leaderboard from './components/Leaderboard';
 
 function HUD() {
   const gameState = useGameStore(state => state.gameState);
@@ -493,6 +496,46 @@ export default function App() {
   const selectedWeapon = useGameStore(state => state.selectedWeapon);
   const setWeapon = useGameStore(state => state.setWeapon);
   const isMobile = useIsMobile();
+
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [loadingAuth, setLoadingAuth] = useState(true);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+  const [isPending, startAuthTransition] = useTransition();
+
+  // Watch Auth status changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setLoadingAuth(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Post scores to cloud on death run
+  useEffect(() => {
+    if (gameState === 'gameover' && currentUser) {
+      setSyncStatus('syncing');
+      (async () => {
+        try {
+          await updateHighScoreInFirebase(currentUser.uid, score);
+          if (score > 0) {
+            await submitLeaderboardEntry(
+              currentUser.displayName || 'Anonymous Operator',
+              score,
+              selectedLegend.specialization,
+              currentUser.uid
+            );
+          }
+          setSyncStatus('success');
+        } catch (err) {
+          console.error("Score auto sync failed:", err);
+          setSyncStatus('error');
+        }
+      })();
+    } else {
+      setSyncStatus('idle');
+    }
+  }, [gameState, currentUser, score, selectedLegend.specialization]);
   const [showCustomization, setShowCustomization] = useState(false);
   const [showPodcast, setShowPodcast] = useState(false);
   const [showArchitecture, setShowArchitecture] = useState(false);
@@ -575,6 +618,72 @@ export default function App() {
               <div className="text-cyan-400/50 text-sm tracking-widest font-bold font-accent">RISE OF OISTARIAN</div>
             </div>
 
+            {/* Firebase Authentication Bar */}
+            <div className="w-full bg-neutral-900/40 border border-cyan-500/15 p-4 rounded-sm mb-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                {currentUser ? (
+                  <>
+                    {currentUser.photoURL ? (
+                      <img 
+                        src={currentUser.photoURL} 
+                        alt="Operator" 
+                        className="w-10 h-10 rounded-sm border border-cyan-400 p-0.5 object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 border border-cyan-400 bg-cyan-950/20 text-cyan-400 font-extrabold flex items-center justify-center rounded-sm">
+                        {currentUser.displayName?.[0] || 'OP'}
+                      </div>
+                    )}
+                    <div className="text-left font-mono">
+                      <div className="text-xs text-white font-bold uppercase tracking-tight flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                        Operator: {currentUser.displayName || 'PILOT'}
+                      </div>
+                      <div className="text-[9px] text-zinc-500 font-semibold font-mono uppercase mt-0.5">
+                        Cloud Link Verified • ID: {currentUser.uid.slice(0, 8)}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-10 h-10 border border-zinc-700 bg-zinc-950/40 text-zinc-500 font-black flex items-center justify-center rounded-sm">
+                      OFF
+                    </div>
+                    <div className="text-left font-mono">
+                      <div className="text-xs text-zinc-400 font-bold uppercase tracking-wider">
+                        Offline Protocol Enabled
+                      </div>
+                      <div className="text-[9px] text-zinc-600 font-medium font-mono uppercase mt-0.5">
+                        Link account to sync high scores and save states
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="flex items-center gap-4">
+                {currentUser ? (
+                  <button
+                    onClick={() => { startAuthTransition(async () => { await logOutUser(); }); }}
+                    disabled={isPending}
+                    className="px-4 py-2 border border-red-500/40 hover:border-red-500 text-red-500 text-[10px] font-black uppercase tracking-widest hover:bg-red-950/10 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    [ SEVER LINK ]
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => { startAuthTransition(async () => { await signInWithGoogle(); }); }}
+                    disabled={isPending}
+                    className="px-5 py-2.5 bg-cyan-500 text-black hover:bg-white hover:shadow-[0_0_15px_rgba(34,211,238,0.4)] text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    [ LINK NEXUS ACCOUNT (GOOGLE) ]
+                  </button>
+                )}
+              </div>
+            </div>
+
+
             {/* Mission Trailer Section */}
             <div className="w-full mb-16">
               <h3 className="text-cyan-400 text-xs font-bold uppercase tracking-[0.4em] mb-6 flex items-center gap-4 justify-center font-display">
@@ -597,92 +706,103 @@ export default function App() {
               </div>
             </div>
 
-            {/* Rarity Filter */}
-            <div className="flex gap-4 mb-8">
-              {(['platinum', 'silver'] as const).map(r => (
-                <button
-                  key={r}
-                  onClick={() => setRarityFilter(r)}
-                  className={`px-8 py-2 border text-xs font-black uppercase tracking-[0.3em] transition-all ${
-                    rarityFilter === r 
-                      ? 'bg-cyan-400 text-black border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.4)]' 
-                      : 'bg-transparent text-cyan-900 border-cyan-900/30 hover:border-cyan-500/50'
-                  }`}
-                >
-                  {r} Units
-                </button>
-              ))}
+            {/* Legend Selection & Global Leaderboard Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full mb-20 items-stretch">
+              <div className="lg:col-span-2 flex flex-col justify-start w-full">
+                {/* Rarity Filter */}
+                <div className="flex gap-4 mb-6">
+                  {(['platinum', 'silver'] as const).map(r => (
+                    <button
+                      key={r}
+                      onClick={() => setRarityFilter(r)}
+                      className={`px-8 py-2 border text-xs font-black uppercase tracking-[0.3em] transition-all ${
+                        rarityFilter === r 
+                          ? 'bg-cyan-400 text-black border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.4)]' 
+                          : 'bg-transparent text-cyan-900 border-cyan-900/30 hover:border-cyan-500/50'
+                      }`}
+                    >
+                      {r} Units
+                    </button>
+                  ))}
+                </div>
+
+                {/* Legend Selection list */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+                  {filteredLegends.map((legend) => (
+                    <button
+                      key={legend.id}
+                      onClick={() => setSelectedLegend(legend)}
+                      className={`p-5 border transition-all duration-300 rounded-sm text-left relative group flex flex-col ${
+                        selectedLegend.id === legend.id 
+                          ? 'bg-cyan-500/10 border-cyan-400 shadow-[0_0_30px_rgba(34,211,238,0.15)]' 
+                          : 'bg-black/40 border-cyan-900/10 hover:border-cyan-500/30'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex flex-col">
+                          <div className={`text-[8px] font-black uppercase tracking-[0.2em] mb-1 ${
+                            legend.rarity === 'platinum' ? 'text-cyan-400' : 'text-slate-500'
+                          }`}>
+                            {legend.specialization.replace(/_/g, ' ')}
+                          </div>
+                          <h3 className="text-2xl font-black text-white uppercase tracking-tighter font-display leading-none">
+                            {legend.codename || legend.name.split(' ')[0]}
+                          </h3>
+                        </div>
+                        {selectedLegend.id === legend.id && (
+                          <div className="w-3 h-3 bg-cyan-400 rounded-full shadow-[0_0_10px_rgba(34,211,238,1)] animate-pulse" />
+                        )}
+                      </div>
+
+                      <div className="mb-4">
+                        <div className="text-[10px] font-bold text-white/90 uppercase mb-1">{legend.name}</div>
+                        <p className="text-[9px] text-cyan-100/30 leading-tight line-clamp-2 h-6 italic">"{legend.description}"</p>
+                      </div>
+
+                      {/* Stat Bars */}
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-6 border-t border-cyan-500/10 pt-4">
+                        {[
+                          { label: 'HLT', val: legend.stats.health },
+                          { label: 'ARM', val: legend.stats.armor },
+                          { label: 'SPD', val: legend.stats.speed },
+                          { label: 'ACC', val: legend.stats.accuracy },
+                          { label: 'STL', val: legend.stats.stealth },
+                          { label: 'LDR', val: legend.stats.leadership }
+                        ].map(stat => (
+                          <div key={stat.label} className="flex flex-col gap-1">
+                            <div className="flex justify-between items-center text-[7px] font-black text-cyan-700">
+                              <span>{stat.label}</span>
+                              <span>{stat.val}</span>
+                            </div>
+                            <div className="h-0.5 bg-cyan-950 w-full overflow-hidden">
+                              <div 
+                                className={`h-full transition-all duration-1000 ${legend.rarity === 'platinum' ? 'bg-cyan-500' : 'bg-slate-500'}`}
+                                style={{ width: `${stat.val}%` }} 
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex justify-between items-center mt-auto pt-2 border-t border-cyan-500/5">
+                        <div className="text-[8px] font-bold text-cyan-600 uppercase font-mono">
+                          {legend.specialAbility}
+                        </div>
+                        <div className="text-[8px] text-cyan-900 font-mono">
+                          CD: {legend.abilityCooldown/1000}s
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Side Column: Leaders Board */}
+              <div className="lg:col-span-1 flex flex-col justify-start w-full self-stretch">
+                <Leaderboard />
+              </div>
             </div>
 
-            {/* Legend Selection */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-20 w-full">
-              {filteredLegends.map((legend) => (
-                <button
-                  key={legend.id}
-                  onClick={() => setSelectedLegend(legend)}
-                  className={`p-5 border transition-all duration-300 rounded-sm text-left relative group flex flex-col ${
-                    selectedLegend.id === legend.id 
-                      ? 'bg-cyan-500/10 border-cyan-400 shadow-[0_0_30px_rgba(34,211,238,0.15)]' 
-                      : 'bg-black/40 border-cyan-900/10 hover:border-cyan-500/30'
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex flex-col">
-                      <div className={`text-[8px] font-black uppercase tracking-[0.2em] mb-1 ${
-                        legend.rarity === 'platinum' ? 'text-cyan-400' : 'text-slate-500'
-                      }`}>
-                        {legend.specialization.replace(/_/g, ' ')}
-                      </div>
-                      <h3 className="text-2xl font-black text-white uppercase tracking-tighter font-display leading-none">
-                        {legend.codename || legend.name.split(' ')[0]}
-                      </h3>
-                    </div>
-                    {selectedLegend.id === legend.id && (
-                      <div className="w-3 h-3 bg-cyan-400 rounded-full shadow-[0_0_10px_rgba(34,211,238,1)] animate-pulse" />
-                    )}
-                  </div>
-
-                  <div className="mb-4">
-                    <div className="text-[10px] font-bold text-white/90 uppercase mb-1">{legend.name}</div>
-                    <p className="text-[9px] text-cyan-100/30 leading-tight line-clamp-2 h-6 italic">"{legend.description}"</p>
-                  </div>
-
-                  {/* Stat Bars */}
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-6 border-t border-cyan-500/10 pt-4">
-                    {[
-                      { label: 'HLT', val: legend.stats.health },
-                      { label: 'ARM', val: legend.stats.armor },
-                      { label: 'SPD', val: legend.stats.speed },
-                      { label: 'ACC', val: legend.stats.accuracy },
-                      { label: 'STL', val: legend.stats.stealth },
-                      { label: 'LDR', val: legend.stats.leadership }
-                    ].map(stat => (
-                      <div key={stat.label} className="flex flex-col gap-1">
-                        <div className="flex justify-between items-center text-[7px] font-black text-cyan-700">
-                          <span>{stat.label}</span>
-                          <span>{stat.val}</span>
-                        </div>
-                        <div className="h-0.5 bg-cyan-950 w-full overflow-hidden">
-                          <div 
-                            className={`h-full transition-all duration-1000 ${legend.rarity === 'platinum' ? 'bg-cyan-500' : 'bg-slate-500'}`}
-                            style={{ width: `${stat.val}%` }} 
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="flex justify-between items-center mt-auto pt-2 border-t border-cyan-500/5">
-                    <div className="text-[8px] font-bold text-cyan-600 uppercase font-mono">
-                      {legend.specialAbility}
-                    </div>
-                    <div className="text-[8px] text-cyan-900 font-mono">
-                      CD: {legend.abilityCooldown/1000}s
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
 
             {/* Main Actions */}
             <div className="flex flex-col gap-6 w-80 mb-20 font-accent">
@@ -880,6 +1000,41 @@ export default function App() {
                     Confirmed Hazard
                   </div>
                 </div>
+              </div>
+
+              {/* Scoring Dashboard Sync Feedback */}
+              <div className="w-full mb-6 bg-neutral-950/60 border border-neutral-800 p-3 rounded-sm flex items-center justify-between text-left font-mono">
+                <div className="flex flex-col">
+                  <span className="text-[8px] text-zinc-500 uppercase tracking-widest font-black font-mono">NEXUS Cloud Score Sync</span>
+                  {currentUser ? (
+                    syncStatus === 'syncing' ? (
+                      <span className="text-[10px] text-cyan-400 font-bold uppercase tracking-wide flex items-center gap-1.5 mt-0.5 animate-pulse">
+                        ⚡ Syncing Mission Logs...
+                      </span>
+                    ) : syncStatus === 'success' ? (
+                      <span className="text-[10px] text-green-400 font-bold uppercase tracking-wide flex items-center gap-1.5 mt-0.5">
+                        ✓ Score Sync Completed
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-red-500 font-bold uppercase tracking-wide mt-0.5">
+                        ✕ Sync Error occurred
+                      </span>
+                    )
+                  ) : (
+                    <span className="text-[9px] text-zinc-600 font-semibold uppercase tracking-wider mt-0.5">
+                      Account offline • High score un-reported
+                    </span>
+                  )}
+                </div>
+                {!currentUser && (
+                  <button
+                    onClick={() => { startAuthTransition(async () => { await signInWithGoogle(); }); }}
+                    disabled={isPending}
+                    className="px-3 py-1.5 bg-cyan-500 text-black text-[9px] font-black uppercase tracking-widest hover:bg-white transition-all rounded-sm cursor-pointer disabled:opacity-50"
+                  >
+                    [ LINK & SYNC ]
+                  </button>
+                )}
               </div>
 
               <div className="w-full border-t border-neutral-800/60 pt-6 flex flex-col gap-3">

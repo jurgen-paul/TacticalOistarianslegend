@@ -1,0 +1,41 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile containing authenticated user info and high score.",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string", "description": "The displayed name of the user." },
+        "email": { "type": "string", "description": "The user email." },
+        "photoURL": { "type": "string", "description": "The avatar URL." },
+        "highScore": { "type": "integer", "description": "The maximum scores extracted across games." },
+        "createdAt": { "type": "object", "format": "date-time", "description": "Creation timestamp." },
+        "updatedAt": { "type": "object", "format": "date-time", "description": "Update timestamp." }
+      },
+      "required": ["displayName", "email", "highScore", "createdAt"]
+    },
+    "LeaderboardEntry": {
+      "title": "LeaderboardEntry",
+      "description": "Global leaderboard entries for public viewing.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Player display name or codename." },
+        "score": { "type": "integer", "description": "The score extracted." },
+        "legend": { "type": "string", "description": "The legend character class used." },
+        "userId": { "type": "string", "description": "Authenticated user id." },
+        "createdAt": { "type": "object", "format": "date-time", "description": "Timestamp of entry creation." }
+      },
+      "required": ["name", "score", "legend", "userId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Access-controlled store of user profiles."
+    },
+    "leaderboard/{entryId}": {
+      "schema": "LeaderboardEntry",
+      "description": "Global leaderboard database."
+    }
+  }
+}

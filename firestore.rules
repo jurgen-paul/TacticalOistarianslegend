@@ -1,0 +1,109 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (default deny catch-all)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper Primitives defined in Phase 3
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Entity validator for UserProfile
+    function isValidUserProfile(data) {
+      return data.displayName is string 
+          && data.displayName.size() > 0 
+          && data.displayName.size() <= 100
+          && data.email is string 
+          && data.email.size() <= 200
+          && data.email == request.auth.token.email
+          && (data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 500))
+          && data.highScore is int 
+          && data.highScore >= 0;
+    }
+
+    // Entity validator for LeaderboardEntry
+    function isValidLeaderboardEntry(data) {
+      return data.name is string 
+          && data.name.size() > 0 
+          && data.name.size() <= 100
+          && data.score is int 
+          && data.score >= 0
+          && data.legend is string 
+          && data.legend.size() <= 50
+          && data.userId is string 
+          && data.userId == request.auth.uid;
+    }
+
+    // Matches users/{userId} (Split PII or Owner only reads/writes)
+    match /users/{userId} {
+      allow get: if isVerified() && isValidId(userId) && userId == request.auth.uid;
+      
+      // Strict list rules enforcing owner query
+      allow list: if isVerified() && resource.data.email == request.auth.token.email;
+
+      // Create profile: must match auth ID, correct structure
+      allow create: if isVerified() 
+                    && isValidId(userId) 
+                    && userId == request.auth.uid
+                    && isValidUserProfile(incoming())
+                    && incoming().createdAt == request.time
+                    && incoming().keys().hasAll(['displayName', 'email', 'highScore', 'createdAt'])
+                    && incoming().keys().size() == 4;
+
+      // Update profile: only allowed to update highScore and updatedAt via this transaction
+      allow update: if isVerified() 
+                    && isValidId(userId) 
+                    && userId == request.auth.uid
+                    && isValidUserProfile(incoming())
+                    && incoming().createdAt == existing().createdAt
+                    && (
+                      // Action: Sync High Score
+                      (incoming().diff(existing()).affectedKeys().hasOnly(['highScore', 'updatedAt'])
+                       && incoming().highScore >= existing().highScore
+                       && incoming().updatedAt == request.time)
+                    );
+
+      // Deny delete entirely for account protection
+      allow delete: if false;
+    }
+
+    // Matches leaderboard/{entryId}
+    match /leaderboard/{entryId} {
+      // Public reading & list queries enforcing score bounds
+      allow get: if isVerified() && isValidId(entryId);
+      allow list: if isVerified() && resource.data.score >= 0;
+
+      // Post high scores: completely immutable entries
+      allow create: if isVerified()
+                    && isValidId(entryId)
+                    && isValidLeaderboardEntry(incoming())
+                    && incoming().createdAt == request.time
+                    && incoming().keys().hasAll(['name', 'score', 'legend', 'userId', 'createdAt'])
+                    && incoming().keys().size() == 5;
+
+      // Once high scores are posted, they must never be edited or cleaned up
+      allow update: if false;
+      allow delete: if false;
+    }
+  }
+}

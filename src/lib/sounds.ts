@@ -25,6 +25,7 @@ class SoundManager {
   private sounds: Map<string, HTMLAudioElement> = new Map();
   private ambientPlayers: Map<string, HTMLAudioElement> = new Map();
   private enabled: boolean = false;
+  private audioCtx: AudioContext | null = null;
 
   constructor() {
     // Preload sounds
@@ -37,15 +38,134 @@ class SoundManager {
 
   enable() {
     this.enabled = true;
-    // Resume AudioContext if needed (browser requirement)
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    if (ctx.state === 'suspended') {
-      ctx.resume();
+    if (!this.audioCtx) {
+      const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtxClass) {
+        this.audioCtx = new AudioCtxClass();
+      }
+    }
+    if (this.audioCtx && this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume();
+    }
+  }
+
+  synthesizeDash(volume: number = 0.5) {
+    try {
+      if (!this.audioCtx) {
+        const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtxClass) {
+          this.audioCtx = new AudioCtxClass();
+        }
+      }
+      
+      const ctx = this.audioCtx;
+      if (!ctx) return;
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+
+      const now = ctx.currentTime;
+
+      // 1. Oscillators for cybertech energetic swoosh charging sound
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const filter = ctx.createBiquadFilter();
+      
+      osc1.type = 'sawtooth';
+      osc2.type = 'triangle';
+      
+      // Start pitch high, drop exponentially to low chest-vibrating impact
+      osc1.frequency.setValueAtTime(800, now);
+      osc1.frequency.exponentialRampToValueAtTime(100, now + 0.25);
+      
+      osc2.frequency.setValueAtTime(400, now);
+      osc2.frequency.exponentialRampToValueAtTime(50, now + 0.3);
+      
+      // Detune oscs slightly to get thickness
+      osc1.detune.setValueAtTime(5, now);
+      osc2.detune.setValueAtTime(-5, now);
+
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(1500, now);
+      filter.frequency.exponentialRampToValueAtTime(150, now + 0.25);
+
+      const oscGain = ctx.createGain();
+      oscGain.gain.setValueAtTime(0.01, now);
+      oscGain.gain.exponentialRampToValueAtTime(0.3, now + 0.05);
+      oscGain.gain.exponentialRampToValueAtTime(0.01, now + 0.28);
+
+      osc1.connect(filter);
+      osc2.connect(filter);
+      filter.connect(oscGain);
+
+      // 2. High-performance clean noise for modern aero dynamic atmospheric movement whoosh
+      const bufferSize = ctx.sampleRate * 0.35; // 350ms
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      
+      const noiseSource = ctx.createBufferSource();
+      noiseSource.buffer = buffer;
+
+      const noiseFilter = ctx.createBiquadFilter();
+      noiseFilter.type = 'bandpass';
+      noiseFilter.Q.setValueAtTime(2.5, now);
+      noiseFilter.frequency.setValueAtTime(3000, now);
+      noiseFilter.frequency.exponentialRampToValueAtTime(200, now + 0.3);
+
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.01, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.4, now + 0.06);
+      noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+
+      noiseSource.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+
+      // Stereo Panner node for 3D dynamic horizontal movement feeling!
+      const panner = (ctx as any).createStereoPanner ? (ctx as any).createStereoPanner() : null;
+      if (panner) {
+        // Swing fast from left to right center
+        panner.pan.setValueAtTime(-0.8, now);
+        panner.pan.linearRampToValueAtTime(0.8, now + 0.3);
+        
+        // Connect to destination through panner
+        const masterGain = ctx.createGain();
+        masterGain.gain.setValueAtTime(volume * 0.8, now);
+        
+        oscGain.connect(panner);
+        noiseGain.connect(panner);
+        panner.connect(masterGain);
+        masterGain.connect(ctx.destination);
+      } else {
+        const masterGain = ctx.createGain();
+        masterGain.gain.setValueAtTime(volume * 0.8, now);
+        
+        oscGain.connect(masterGain);
+        noiseGain.connect(masterGain);
+        masterGain.connect(ctx.destination);
+      }
+
+      noiseSource.start(now);
+      osc1.start(now);
+      osc2.start(now);
+
+      noiseSource.stop(now + 0.45);
+      osc1.stop(now + 0.45);
+      osc2.stop(now + 0.45);
+
+    } catch (e) {
+      console.error('Error during dash sound synthesis:', e);
     }
   }
 
   play(name: keyof typeof SOUND_URLS, volume: number = 0.5, loop: boolean = false) {
     if (!this.enabled) return;
+
+    if (name === 'dash') {
+      this.synthesizeDash(volume);
+    }
     
     const sound = this.sounds.get(name);
     if (sound) {
