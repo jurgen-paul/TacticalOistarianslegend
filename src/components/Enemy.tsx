@@ -212,7 +212,8 @@ export function Enemy({ data }: { data: EnemyData }) {
               const userData = rb.userData as { name?: string };
               if (userData.name === 'player') {
                 // Hit player!
-                hitPlayer();
+                const enemyTypeFormatted = data.type ? (data.type.charAt(0).toUpperCase() + data.type.slice(1)) : 'Hostile';
+                hitPlayer(`${enemyTypeFormatted} Laser Pulse`);
                 soundManager.play('shoot', 0.2);
                 addParticles([camera.position.x, camera.position.y, camera.position.z], stats.color);
                 addLaser(

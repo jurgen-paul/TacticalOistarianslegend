@@ -139,6 +139,27 @@ export const MISSIONS: Mission[] = [
     environment: "Dense Rainforest",
     enemies: ["ghost", "tank"],
     triggers: {}
+  },
+  {
+    id: "star_system_survival",
+    title: "STAR SYSTEM SURVIVAL",
+    region: Region.Europe,
+    description: "Deep space survival simulation. Manage oxygen levels and navigate through asteroid-dense sectors to recover lost star-maps.",
+    objectives: ["Recover 3 Star-Maps", "Survive 5 Asteroid Waves", "Repair Oxygen Hub"],
+    environment: "Zero-G Space Station",
+    enemies: ["ghost", "scout", "tank"],
+    triggers: {
+      oxygen_leak: {
+        condition: (state: any) => state.gameState === 'playing' && Math.random() < 0.0005,
+        effect: (state: any) => {
+          state.addVoiceLine("SYSTEM", "CRITICAL WARNING: Oxygen Hub integrity compromised. Vital signs dropping.");
+          state.addEvent("OXYGEN DEPLETION IN PROGRESS");
+          return {
+            playerHealth: Math.max(10, state.playerHealth - 20)
+          };
+        }
+      }
+    }
   }
 ];
 
@@ -595,6 +616,7 @@ interface GameStore {
   playerMaxHealth: number;
   lastHitTime: number; // Time when player hits an enemy
   lastDamageTime: number; // Time when player takes damage
+  lastDamageCause: string | null;
   playerPosition: [number, number, number];
   playerRotation: number;
   
@@ -665,7 +687,7 @@ interface GameStore {
   endGame: () => void;
   leaveGame: () => void;
   updateTime: (delta: number) => void;
-  hitPlayer: () => void;
+  hitPlayer: (source?: string) => void;
   hitEnemy: (id: string, byPlayer?: boolean) => void;
   addLaser: (start: [number, number, number], end: [number, number, number], color: string) => void;
   addParticles: (position: [number, number, number], color: string) => void;
@@ -730,6 +752,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   events: [],
   lastHitTime: 0,
   lastDamageTime: 0,
+  lastDamageCause: null,
   playerHealth: 100,
   playerMaxHealth: 100,
   playerPosition: [0, 0, 0],
@@ -889,7 +912,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { socket } = get();
 
     setTimeout(() => {
-      get().addVoiceLine("NEXUS ONE", "Mission parameters initialized. Eden Vault location confirmed. Proceed with caution.");
+      get().addVoiceLine("NEXUS ONE", "Mission parameters initialized. HD Video Player Link: STABLE. Proceed with caution.");
     }, 2000);
     
     if (socket) {
@@ -1024,6 +1047,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       playerDisabledUntil: 0,
       playerHealth: get().selectedLegend.stats.health,
       playerMaxHealth: get().selectedLegend.stats.health,
+      lastDamageCause: null,
       enemies: INITIAL_ENEMIES.map(e => ({ ...e, state: 'active', disabledUntil: 0, health: e.maxHealth })),
       lasers: [],
       particles: [],
@@ -1079,7 +1103,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     if (newTime <= 0) {
       if (state.socket) state.socket.disconnect();
-      return { timeLeft: 0, gameState: 'gameover', socket: null, roomId: null };
+      return { timeLeft: 0, gameState: 'gameover', socket: null, roomId: null, lastDamageCause: "Chronological Exhaustion (Time Limit)" };
     }
 
     state.checkTriggers();
@@ -1090,7 +1114,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     return { timeLeft: newTime, dashReadyNotified, empReadyNotified, activeVoiceLines };
   }),
 
-  hitPlayer: () => set((state) => {
+  hitPlayer: (source?: string) => set((state) => {
     if (state.playerState === 'disabled' || state.gameState !== 'playing') return state;
     if (Date.now() < state.shieldActiveUntil) {
       soundManager.play('ready', 0.2); // Shield block sound
@@ -1106,21 +1130,29 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const damage = 20; // Standard damage
     const newHealth = Math.max(0, state.playerHealth - damage);
+    const damageSource = source || "Unknown Hostile Force";
 
     if (newHealth <= 0) {
+      if (state.socket) {
+        state.socket.disconnect();
+      }
       return {
         playerHealth: 0,
         playerState: 'disabled',
         playerDisabledUntil: Date.now() + 3000,
         score: Math.max(0, state.score - 50),
         lastDamageTime: Date.now(),
-        trustScore: newTrust
+        lastDamageCause: damageSource,
+        gameState: 'gameover',
+        trustScore: newTrust,
+        socket: null
       };
     }
 
     return {
       playerHealth: newHealth,
       lastDamageTime: Date.now(),
+      lastDamageCause: damageSource,
       trustScore: newTrust
     };
   }),
@@ -1262,7 +1294,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     });
 
     if (playerHit) {
-      get().hitPlayer();
+      get().hitPlayer('Sniper Charged Shot');
       return { projectiles: [] }; // Clear projectiles on hit for simplicity
     }
 
@@ -1465,6 +1497,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Collision detection with hazards
     const now = Date.now();
     let playerHit = false;
+    let hitHazardType = '';
     const damagedEnemies: string[] = [];
 
     hazards.forEach(h => {
@@ -1477,6 +1510,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       
       if (inX && inZ && state.playerState === 'active') {
         playerHit = true;
+        hitHazardType = h.type === 'laser' ? 'Laser Fence Grid' : h.type === 'gas' ? 'Toxic Gas Cloud' : 'Disruptor Field';
       }
 
       // Check enemies
@@ -1491,7 +1525,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     });
 
     if (playerHit) {
-      state.hitPlayer();
+      state.hitPlayer(hitHazardType || 'Environmental Hazard');
     }
 
     let enemies = state.enemies;

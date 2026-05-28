@@ -14,6 +14,7 @@ import { Minimap } from './components/Minimap';
 import { PodcastPlayer } from './components/PodcastPlayer';
 import { AmbientHandler } from './components/AmbientHandler';
 import { SystemOverview } from './components/SystemOverview';
+import { CinemaStation } from './components/CinemaStation';
 import { getStrategicAdvice } from './lib/gemini';
 
 function HUD() {
@@ -484,6 +485,7 @@ export default function App() {
   const gameState = useGameStore(state => state.gameState);
   const score = useGameStore(state => state.score);
   const startGame = useGameStore(state => state.startGame);
+  const lastDamageCause = useGameStore(state => state.lastDamageCause);
   const weaponAttachments = useGameStore(state => state.weaponAttachments);
   const setAttachment = useGameStore(state => state.setAttachment);
   const selectedLegend = useGameStore(state => state.selectedLegend);
@@ -494,6 +496,7 @@ export default function App() {
   const [showCustomization, setShowCustomization] = useState(false);
   const [showPodcast, setShowPodcast] = useState(false);
   const [showArchitecture, setShowArchitecture] = useState(false);
+  const [showCinema, setShowCinema] = useState(false);
   const [aiAdvice, setAiAdvice] = useState<string | null>(null);
   const [isConsulting, setIsConsulting] = useState(false);
   const [showFusionLab, setShowFusionLab] = useState(false);
@@ -559,6 +562,7 @@ export default function App() {
       {/* Menus */}
       {showPodcast && <PodcastPlayer onClose={() => setShowPodcast(false)} />}
       {showArchitecture && <SystemOverview onClose={() => setShowArchitecture(false)} />}
+      {showCinema && <CinemaStation onClose={() => setShowCinema(false)} />}
       
       {gameState === 'menu' && (
         <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center z-10 pointer-events-auto">
@@ -714,6 +718,14 @@ export default function App() {
               </button>
 
               <button
+                onClick={() => setShowCinema(true)}
+                className="w-full px-8 py-3 bg-red-950/30 border border-red-500/50 text-red-400 text-sm font-bold rounded-sm hover:bg-red-500/20 hover:border-red-400 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 uppercase tracking-widest flex items-center justify-center gap-3 group shadow-[0_0_15px_rgba(239,68,68,0.1)]"
+              >
+                <div className="w-1.5 h-1.5 rounded-full bg-red-500 group-hover:animate-pulse shadow-[0_0_8px_#ef4444]" />
+                Cinematic Archive [HD]
+              </button>
+
+              <button
                 onClick={() => setShowFusionLab(true)}
                 className="w-full px-8 py-3 bg-purple-950/30 border border-purple-500/50 text-purple-400 text-sm font-bold rounded-sm hover:bg-purple-500/20 hover:border-purple-400 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 uppercase tracking-widest shadow-[0_0_15px_rgba(168,85,247,0.2)]"
               >
@@ -817,24 +829,74 @@ export default function App() {
       )}
 
       {gameState === 'gameover' && (
-        <div className="absolute inset-0 bg-black/95 flex flex-col items-center justify-center z-10 pointer-events-auto">
-          <div className="text-red-500 text-xs tracking-[0.5em] font-bold mb-2">CRITICAL SYSTEM FAILURE</div>
-          <h1 className="text-6xl md:text-8xl font-black text-white mb-4 drop-shadow-[0_0_30px_rgba(239,68,68,0.3)] tracking-tighter">
-            MISSION <span className="text-red-500">ABORTED</span>
-          </h1>
-          <div className="bg-red-950/20 border border-red-500/30 p-6 rounded-lg backdrop-blur-md max-w-xs w-full mb-8 text-center">
-            <div className="text-cyan-400 text-3xl font-bold mb-1">
-              {score}
-            </div>
-            <div className="text-cyan-900 text-xs font-bold uppercase tracking-widest">Tactical Efficiency Rating</div>
-          </div>
-          <button
-            id="start-button"
-            onClick={() => startGame()}
-            className="px-8 py-4 bg-red-500/10 border-2 border-red-500 text-red-500 text-xl font-bold rounded-sm hover:bg-red-500 hover:text-black hover:scale-105 active:scale-95 transition-all duration-300 shadow-[0_0_20px_rgba(239,68,68,0.2)] font-display"
+        <div className="absolute inset-0 bg-black/95 flex flex-col items-center justify-center z-50 pointer-events-auto backdrop-blur-md p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.4 }}
+            className="w-full max-w-lg bg-gradient-to-b from-red-950/45 to-black border-2 border-red-500/40 p-8 rounded-sm shadow-[0_0_50px_rgba(239,68,68,0.25)] relative overflow-hidden"
           >
-            RE-INITIALIZE SYSTEM
-          </button>
+            {/* Tech line accents */}
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-red-800 to-red-500" />
+            <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-red-950 to-transparent" />
+            
+            <div className="flex flex-col items-center text-center">
+              <div className="flex items-center gap-2 px-3 py-1 bg-red-500/15 border border-red-500/30 text-red-500 text-[10px] font-black uppercase tracking-[0.3em] rounded-full mb-6">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                Connection Severed • Life Signs Offline
+              </div>
+
+              <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-white leading-none tracking-tighter mb-2 font-display">
+                MISSION <span className="text-red-500">ABORTED</span>
+              </h1>
+              <p className="text-[10px] text-red-400/55 uppercase tracking-[0.25em] font-medium mb-8">
+                NEXUS-1 Intelligence • Tactical Diagnostic Report
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full mb-8">
+                {/* Score Panel */}
+                <div className="bg-neutral-950/85 border border-neutral-800/80 p-5 rounded-sm flex flex-col justify-between items-center relative group hover:border-cyan-500/30 transition-all duration-300">
+                  <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mb-1">
+                    Tactical Efficiency
+                  </div>
+                  <div className="text-4xl font-extrabold text-cyan-400 drop-shadow-[0_0_15px_rgba(34,211,238,0.2)]">
+                    {score}
+                  </div>
+                  <div className="text-[9px] text-cyan-500/40 uppercase tracking-widest font-semibold mt-2">
+                    Points Extracted
+                  </div>
+                </div>
+
+                {/* Damage Cause Panel */}
+                <div className="bg-neutral-950/85 border border-neutral-800/80 p-5 rounded-sm flex flex-col justify-between items-center relative group hover:border-red-500/30 transition-all duration-300">
+                  <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mb-1">
+                    Fatal Damage Cause
+                  </div>
+                  <div className="text-lg font-black text-red-500 tracking-tight uppercase leading-normal break-words max-w-full text-center py-2 flex-grow flex items-center justify-center">
+                    {lastDamageCause || "Inertia Matrix Collapse"}
+                  </div>
+                  <div className="text-[9px] text-red-500/40 uppercase tracking-widest font-semibold mt-2 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
+                    Confirmed Hazard
+                  </div>
+                </div>
+              </div>
+
+              <div className="w-full border-t border-neutral-800/60 pt-6 flex flex-col gap-3">
+                <button
+                  id="respawn-button"
+                  onClick={() => startGame()}
+                  className="w-full py-4 bg-red-500 text-black text-sm font-black uppercase tracking-[0.3em] rounded-sm hover:bg-white hover:text-black hover:shadow-[0_0_30px_rgba(255,255,255,0.4)] transition-all duration-300 shadow-[0_0_25px_rgba(239,68,68,0.4)] font-display"
+                >
+                  RESPAWN
+                </button>
+                
+                <div className="text-[8px] text-zinc-600 uppercase tracking-[0.15em] mt-2 leading-relaxed">
+                  Caution: Respawning will reload tactical space & re-initialize sentinel presence.
+                </div>
+              </div>
+            </div>
+          </motion.div>
         </div>
       )}
       {/* Customization Modal */}
