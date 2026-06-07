@@ -89,9 +89,9 @@ service cloud.firestore {
 
     // Matches leaderboard/{entryId}
     match /leaderboard/{entryId} {
-      // Public reading & list queries enforcing score bounds
-      allow get: if isVerified() && isValidId(entryId);
-      allow list: if isVerified() && resource.data.score >= 0;
+      // Public reading & list queries
+      allow get: if isValidId(entryId);
+      allow list: if true;
 
       // Post high scores: completely immutable entries
       allow create: if isVerified()

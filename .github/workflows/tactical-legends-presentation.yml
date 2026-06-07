@@ -1,0 +1,45 @@
+name: Tactical Legends Presentation Workflow
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  generate-presentation:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository code
+      uses: actions/checkout@v4
+
+    - name: Setup Python Runtime Environment
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+
+    - name: Install System Dependencies for Pygame headlessly
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libsdl2-2.0-0 libsdl2-image-2.0-0 libsdl2-mixer-2.0-0 libsdl2-ttf-2.0-0 libportmidi-dev
+
+    - name: Install Pygame and OpenCV
+      run: |
+        python -m pip install --upgrade pip
+        pip install pygame opencv-python
+
+    - name: Execute Pygame Presentation Frame Exporter
+      run: |
+        python tactical_legends_video_presentation.py --headless --export
+
+    - name: Upload Presentation Render Artifacts (MP4 & Raw Frames)
+      uses: actions/upload-artifact@v4
+      with:
+        name: tactical-legends-presentation-renders
+        path: |
+          tactical_legends_presentation.mp4
+          presentation_output/
+        if-no-files-found: warn
