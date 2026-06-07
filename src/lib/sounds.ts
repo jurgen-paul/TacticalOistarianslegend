@@ -160,14 +160,114 @@ class SoundManager {
     }
   }
 
-  play(name: keyof typeof SOUND_URLS, volume: number = 0.5, loop: boolean = false) {
+  synthesizeVictory(volume: number = 0.5) {
+    try {
+      if (!this.audioCtx) {
+        const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtxClass) {
+          this.audioCtx = new AudioCtxClass();
+        }
+      }
+      
+      const ctx = this.audioCtx;
+      if (!ctx) return;
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+
+      const now = ctx.currentTime;
+      // Synthesize an uplifting cinematic major chord arpeggio with high tech cyber vibes
+      // Notes: G4 (392.00 Hz), B4 (493.88 Hz), D5 (587.33 Hz), G5 (783.99 Hz)
+      const notes = [392.00, 493.88, 587.33, 783.99];
+      const noteDelay = 0.12; // Arpeggio delay
+
+      notes.forEach((freq, idx) => {
+        const noteTime = now + idx * noteDelay;
+        
+        // Main synth tone
+        const osc = ctx.createOscillator();
+        const subOsc = ctx.createOscillator();
+        const oscGain = ctx.createGain();
+        const filter = ctx.createBiquadFilter();
+        
+        osc.type = 'sine';
+        subOsc.type = 'triangle';
+        
+        osc.frequency.setValueAtTime(freq, noteTime);
+        subOsc.frequency.setValueAtTime(freq / 2, noteTime); // rich low octave
+        
+        // Gentle vibrato
+        osc.detune.setValueAtTime(0, noteTime);
+        osc.detune.linearRampToValueAtTime(10, noteTime + 1.2);
+        
+        // High quality resonance sweep filter
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(100, noteTime);
+        filter.frequency.exponentialRampToValueAtTime(2200, noteTime + 0.35);
+        filter.frequency.exponentialRampToValueAtTime(800, noteTime + 1.5);
+        filter.Q.setValueAtTime(4.0, noteTime);
+
+        // Sound volume envelope
+        oscGain.gain.setValueAtTime(0, noteTime);
+        oscGain.gain.linearRampToValueAtTime(0.35 * volume, noteTime + 0.08);
+        oscGain.gain.exponentialRampToValueAtTime(0.2 * volume, noteTime + 0.4);
+        oscGain.gain.exponentialRampToValueAtTime(0.001, noteTime + 2.0); // long chime trail
+        
+        // Connections
+        osc.connect(filter);
+        subOsc.connect(filter);
+        filter.connect(oscGain);
+        oscGain.connect(ctx.destination);
+        
+        osc.start(noteTime);
+        subOsc.start(noteTime);
+        
+        osc.stop(noteTime + 2.1);
+        subOsc.stop(noteTime + 2.1);
+      });
+      
+      // Add a sparkling clean noise pulse at start of chime to sound energetic
+      const whiteNoiseBufferSize = ctx.sampleRate * 0.15;
+      const buffer = ctx.createBuffer(1, whiteNoiseBufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < whiteNoiseBufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.08 * volume, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+      
+      const noiseFilter = ctx.createBiquadFilter();
+      noiseFilter.type = 'bandpass';
+      noiseFilter.frequency.setValueAtTime(2500, now);
+      
+      noise.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+      
+      noise.start(now);
+      noise.stop(now + 0.2);
+
+    } catch (e) {
+      console.error('Error during victory fanfare synthesis:', e);
+    }
+  }
+
+  play(name: keyof typeof SOUND_URLS | 'victory', volume: number = 0.5, loop: boolean = false) {
     if (!this.enabled) return;
 
     if (name === 'dash') {
       this.synthesizeDash(volume);
     }
+    if (name === 'victory') {
+      this.synthesizeVictory(volume);
+      return;
+    }
     
-    const sound = this.sounds.get(name);
+    const sound = this.sounds.get(name as keyof typeof SOUND_URLS);
     if (sound) {
       // For overlapping sounds like shooting, we clone the node
       const s = sound.cloneNode() as HTMLAudioElement;

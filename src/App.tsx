@@ -16,9 +16,12 @@ import { PodcastPlayer } from './components/PodcastPlayer';
 import { AmbientHandler } from './components/AmbientHandler';
 import { SystemOverview } from './components/SystemOverview';
 import { CinemaStation } from './components/CinemaStation';
+import { GameplayVideoMaps } from './components/GameplayVideoMaps';
+import { MissionBriefingModal } from './components/MissionBriefingModal';
 import { getStrategicAdvice } from './lib/gemini';
 import { auth, signInWithGoogle, logOutUser, updateHighScoreInFirebase, submitLeaderboardEntry } from './services/firebase';
 import Leaderboard from './components/Leaderboard';
+import { soundManager } from './lib/sounds';
 
 function HUD() {
   const gameState = useGameStore(state => state.gameState);
@@ -487,6 +490,10 @@ function useIsMobile() {
 export default function App() {
   const gameState = useGameStore(state => state.gameState);
   const score = useGameStore(state => state.score);
+  const timeLeft = useGameStore(state => state.timeLeft);
+  const trustScore = useGameStore(state => state.trustScore);
+  const moralityScore = useGameStore(state => state.moralityScore);
+  const leaveGame = useGameStore(state => state.leaveGame);
   const startGame = useGameStore(state => state.startGame);
   const lastDamageCause = useGameStore(state => state.lastDamageCause);
   const weaponAttachments = useGameStore(state => state.weaponAttachments);
@@ -510,6 +517,14 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  // Trigger positive sound feedback immediately when victory state is activated
+  useEffect(() => {
+    if (gameState === 'victory') {
+      soundManager.enable();
+      soundManager.play('victory', 1.0);
+    }
+  }, [gameState]);
 
   // Post scores to cloud on death run
   useEffect(() => {
@@ -540,6 +555,8 @@ export default function App() {
   const [showPodcast, setShowPodcast] = useState(false);
   const [showArchitecture, setShowArchitecture] = useState(false);
   const [showCinema, setShowCinema] = useState(false);
+  const [showVideoMaps, setShowVideoMaps] = useState(false);
+  const [showBriefing, setShowBriefing] = useState(false);
   const [aiAdvice, setAiAdvice] = useState<string | null>(null);
   const [isConsulting, setIsConsulting] = useState(false);
   const [showFusionLab, setShowFusionLab] = useState(false);
@@ -606,6 +623,16 @@ export default function App() {
       {showPodcast && <PodcastPlayer onClose={() => setShowPodcast(false)} />}
       {showArchitecture && <SystemOverview onClose={() => setShowArchitecture(false)} />}
       {showCinema && <CinemaStation onClose={() => setShowCinema(false)} />}
+      {showVideoMaps && <GameplayVideoMaps onClose={() => setShowVideoMaps(false)} />}
+      {showBriefing && (
+        <MissionBriefingModal 
+          onClose={() => setShowBriefing(false)} 
+          onDeploy={() => {
+            setShowBriefing(false);
+            startGame();
+          }} 
+        />
+      )}
       
       {gameState === 'menu' && (
         <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center z-10 pointer-events-auto">
@@ -807,7 +834,7 @@ export default function App() {
             {/* Main Actions */}
             <div className="flex flex-col gap-6 w-80 mb-20 font-accent">
               <button
-                onClick={() => startGame()}
+                onClick={() => setShowBriefing(true)}
                 className="w-full px-8 py-4 bg-cyan-500/10 border-2 border-cyan-400 text-cyan-400 text-xl font-bold rounded-sm hover:bg-cyan-400 hover:text-black hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-[0_0_20px_rgba(34,211,238,0.3)] group relative overflow-hidden font-display"
               >
                 <span className="relative z-10 transition-colors duration-300">INITIALIZE DEPLOYMENT</span>
@@ -843,6 +870,15 @@ export default function App() {
               >
                 <div className="w-1.5 h-1.5 rounded-full bg-red-500 group-hover:animate-pulse shadow-[0_0_8px_#ef4444]" />
                 Cinematic Archive [HD]
+              </button>
+
+              <button
+                id="tactical-maps-button"
+                onClick={() => setShowVideoMaps(true)}
+                className="w-full px-8 py-3 bg-emerald-950/30 border border-emerald-500/50 text-emerald-400 text-sm font-bold rounded-sm hover:bg-emerald-500/20 hover:border-emerald-400 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 uppercase tracking-widest flex items-center justify-center gap-3 group shadow-[0_0_15px_rgba(16,185,129,0.15)]"
+              >
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 group-hover:animate-ping shadow-[0_0_8px_#10b981]" />
+                Tactical Video Maps
               </button>
 
               <button
@@ -1048,6 +1084,159 @@ export default function App() {
                 
                 <div className="text-[8px] text-zinc-600 uppercase tracking-[0.15em] mt-2 leading-relaxed">
                   Caution: Respawning will reload tactical space & re-initialize sentinel presence.
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {gameState === 'victory' && (
+        <div className="absolute inset-0 bg-black/95 flex flex-col items-center justify-center z-50 pointer-events-auto backdrop-blur-md p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.4 }}
+            className="w-full max-w-xl bg-gradient-to-b from-emerald-950/45 to-black border-2 border-emerald-500/40 p-8 rounded-sm shadow-[0_0_50px_rgba(16,185,129,0.25)] relative overflow-hidden"
+          >
+            {/* Tech line accents */}
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 via-emerald-800 to-emerald-500" />
+            <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-emerald-950 to-transparent" />
+            
+            <div className="flex flex-col items-center text-center">
+              <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-black uppercase tracking-[0.3em] rounded-full mb-6">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                Vanguard Signal Secured • Extraction Link Active
+              </div>
+
+              <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-white leading-none tracking-tighter mb-2 font-display">
+                MISSION <span className="text-emerald-400">ACCOMPLISHED</span>
+              </h1>
+              <p className="text-[10px] text-emerald-400/55 uppercase tracking-[0.25em] font-medium mb-8">
+                NEXUS-1 Intelligence • Combat & Operations Report
+              </p>
+
+              {/* Grid with statistics */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full mb-6">
+                {/* Score */}
+                <div className="bg-neutral-950/85 border border-neutral-800/80 p-3 rounded-sm flex flex-col items-center group hover:border-emerald-500/30 transition-all duration-300">
+                  <span className="text-[8px] text-zinc-500 uppercase tracking-widest font-bold mb-1">Combat Yield</span>
+                  <span className="text-2xl font-extrabold text-emerald-400 drop-shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+                    {score}
+                  </span>
+                  <span className="text-[7px] text-zinc-600 uppercase mt-0.5">Score Points</span>
+                </div>
+
+                {/* Time Left */}
+                <div className="bg-neutral-950/85 border border-neutral-800/80 p-3 rounded-sm flex flex-col items-center group hover:border-emerald-500/30 transition-all duration-300">
+                  <span className="text-[8px] text-zinc-500 uppercase tracking-widest font-bold mb-1">Time Remaining</span>
+                  <span className="text-2xl font-extrabold text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.2)]">
+                    {Math.floor(timeLeft / 60)}:{(Math.floor(timeLeft) % 60).toString().padStart(2, '0')}
+                  </span>
+                  <span className="text-[7px] text-zinc-600 uppercase mt-0.5">Chronos Matrix</span>
+                </div>
+
+                {/* Trust score */}
+                <div className="bg-neutral-950/85 border border-neutral-800/80 p-3 rounded-sm flex flex-col items-center group hover:border-emerald-500/30 transition-all duration-300">
+                  <span className="text-[8px] text-zinc-500 uppercase tracking-widest font-bold mb-1">System Trust</span>
+                  <span className="text-2xl font-extrabold text-purple-400 drop-shadow-[0_0_10px_rgba(192,132,252,0.2)]">
+                    {trustScore}%
+                  </span>
+                  <span className="text-[7px] text-zinc-600 uppercase mt-0.5">Command Rating</span>
+                </div>
+
+                {/* Morality score */}
+                <div className="bg-neutral-950/85 border border-neutral-800/80 p-3 rounded-sm flex flex-col items-center group hover:border-emerald-500/30 transition-all duration-300">
+                  <span className="text-[8px] text-zinc-500 uppercase tracking-widest font-bold mb-1">Moral Integrity</span>
+                  <span className="text-2xl font-extrabold text-cyan-300 drop-shadow-[0_0_10px_rgba(103,232,249,0.2)]">
+                    {moralityScore}%
+                  </span>
+                  <span className="text-[7px] text-zinc-600 uppercase mt-0.5">Reserve Resonance</span>
+                </div>
+              </div>
+
+              {/* Experience Gain Section */}
+              <div className="w-full bg-neutral-950/75 border border-emerald-500/10 p-5 rounded-sm text-left mb-6 relative overflow-hidden group">
+                <div className="flex justify-between items-end mb-2 font-mono">
+                  <div>
+                    <div className="text-[8px] text-zinc-500 uppercase tracking-widest font-bold">LEGEND PROGRESSION</div>
+                    <div className="text-sm font-black text-white mt-1 uppercase">XP ALLOCATION DETECTED</div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-zinc-500 text-[9px] mr-1">TOTAL</span>
+                    <span className="text-base font-black text-emerald-400">
+                      +{3500 + score * 15 + trustScore * 10 + moralityScore * 8} XP
+                    </span>
+                  </div>
+                </div>
+
+                {/* Micro Breakdowns */}
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[9px] font-mono border-t border-neutral-900/60 pt-3 mb-3 text-zinc-400">
+                  <div className="flex justify-between border-b border-neutral-900/40 pb-0.5">
+                    <span>Base Contract:</span>
+                    <span className="text-white">+3,500 XP</span>
+                  </div>
+                  <div className="flex justify-between border-b border-neutral-900/40 pb-0.5">
+                    <span>Tactical Yield Bonus:</span>
+                    <span className="text-emerald-400">+{score * 15} XP</span>
+                  </div>
+                  <div className="flex justify-between border-b border-neutral-900/40 pb-0.5">
+                    <span>Trust Efficiency:</span>
+                    <span className="text-purple-400">+{trustScore * 10} XP</span>
+                  </div>
+                  <div className="flex justify-between border-b border-neutral-900/40 pb-0.5">
+                    <span>Resonant Integrity:</span>
+                    <span className="text-cyan-400">+{moralityScore * 8} XP</span>
+                  </div>
+                </div>
+
+                {/* Animated progress bar */}
+                <div className="w-full bg-neutral-900 h-2.5 rounded-full overflow-hidden border border-neutral-800 relative">
+                  <motion.div 
+                    initial={{ width: '0%' }}
+                    animate={{ width: '100%' }}
+                    transition={{ duration: 1.5, ease: 'easeOut', delay: 0.3 }}
+                    className="h-full bg-gradient-to-r from-emerald-500 to-cyan-400"
+                  />
+                  <div className="absolute inset-x-0 top-0 bottom-0 bg-[linear-gradient(90deg,transparent_50%,rgba(0,0,0,0.15)_50%)] bg-[length:4px_100%] pointer-events-none" />
+                </div>
+                <div className="flex justify-between mt-1.5 text-[8px] text-zinc-500 font-mono">
+                  <span>LEVEL UP STATUS: SECURED</span>
+                  <span className="text-emerald-400 font-bold">100% COMPLETION</span>
+                </div>
+              </div>
+
+              {/* Squad Deployed Panel */}
+              <div className="w-full bg-neutral-950/50 border border-neutral-900 p-3 rounded-sm flex items-center justify-between text-left font-mono mb-8 font-mono">
+                <div className="flex flex-col">
+                  <span className="text-[8px] text-zinc-500 uppercase tracking-widest font-black">Operator Commended</span>
+                  <span className="text-xs text-white font-bold uppercase mt-0.5">
+                    {selectedLegend.name}
+                  </span>
+                  <span className="text-[9px] text-emerald-400/60 font-semibold uppercase mt-0.5 tracking-wide">
+                    {selectedLegend.specialization.replace('_', ' ')}
+                  </span>
+                </div>
+                <div className="text-right flex flex-col">
+                  <span className="text-[8px] text-zinc-500 uppercase tracking-widest font-black">CHASSIS LOADOUT</span>
+                  <span className="text-[10px] text-zinc-300 font-bold uppercase mt-0.5">
+                    {selectedWeapon.name}
+                  </span>
+                </div>
+              </div>
+
+              {/* Continue button */}
+              <div className="w-full flex flex-col gap-3">
+                <button
+                  id="continue-button"
+                  onClick={() => leaveGame()}
+                  className="w-full py-4 bg-emerald-500 text-black text-sm font-black uppercase tracking-[0.3em] rounded-sm hover:bg-white hover:text-black hover:shadow-[0_0_30px_rgba(255,255,255,0.4)] transition-all duration-300 shadow-[0_0_25px_rgba(16,185,129,0.4)] font-display cursor-pointer"
+                >
+                  CONTINUE
+                </button>
+                
+                <div className="text-[8px] text-zinc-600 uppercase tracking-[0.15em] mt-1 leading-relaxed">
+                  Notice: System telemetry will register this victory into the active Leaderboard register.
                 </div>
               </div>
             </div>

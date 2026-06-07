@@ -10,7 +10,7 @@ import { io, Socket } from 'socket.io-client';
 import { soundManager } from './lib/sounds';
 import { Relic, INITIAL_RELICS, fusionEngine } from './services/fusionEngine';
 
-export type GameState = 'menu' | 'playing' | 'gameover';
+export type GameState = 'menu' | 'playing' | 'gameover' | 'victory';
 export type EntityState = 'active' | 'disabled';
 
 export type EnemyType = 'scout' | 'tank' | 'sniper' | 'standard' | 'ghost';
@@ -739,6 +739,12 @@ const INITIAL_ENEMIES: EnemyData[] = [
   { id: 'bot-6', position: [0, 1, -60], state: 'active', disabledUntil: 0, type: 'ghost', lastHitTime: 0, health: 60, maxHealth: 60 },
 ];
 
+export const INITIAL_OBJECTIVES: ObjectiveData[] = [
+  { id: 'obj-1', type: 'capture', position: [0, 0, 0], progress: 0, isBeingCaptured: false, label: 'Central Data Core', controlledBy: 'none' },
+  { id: 'obj-2', type: 'capture', position: [50, 0, 50], progress: 0, isBeingCaptured: false, label: 'Alpha Node', controlledBy: 'none' },
+  { id: 'obj-3', type: 'payload', position: [-50, 0, -50], progress: 0, isBeingCaptured: false, label: 'Tactical Payload', timer: 300 },
+];
+
 export const useGameStore = create<GameStore>((set, get) => ({
   gameState: 'menu',
   score: 0,
@@ -763,11 +769,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   dashReadyNotified: true,
   empReadyNotified: true,
   
-  objectives: [
-    { id: 'obj-1', type: 'capture', position: [0, 0, 0], progress: 0, isBeingCaptured: false, label: 'Central Data Core', controlledBy: 'none' },
-    { id: 'obj-2', type: 'capture', position: [50, 0, 50], progress: 0, isBeingCaptured: false, label: 'Alpha Node', controlledBy: 'none' },
-    { id: 'obj-3', type: 'payload', position: [-50, 0, -50], progress: 0, isBeingCaptured: false, label: 'Tactical Payload', timer: 300 },
-  ],
+  objectives: INITIAL_OBJECTIVES,
   
   hazards: [
     { id: 'h-1', type: 'laser', position: [20, 0, 0], size: [1, 5, 10], isActive: false, lastToggleTime: 0 },
@@ -941,7 +943,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         gameState: 'playing',
         timeLeft: 120,
         score: 0,
-        enemies: INITIAL_ENEMIES.map(e => ({ ...e, state: 'active', disabledUntil: 0 }))
+        enemies: INITIAL_ENEMIES.map(e => ({ ...e, state: 'active', disabledUntil: 0 })),
+        objectives: INITIAL_OBJECTIVES,
       });
     });
 
@@ -1054,6 +1057,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       events: [],
       socket: newSocket,
       otherPlayers: {},
+      objectives: INITIAL_OBJECTIVES,
     });
   },
 
@@ -1427,6 +1431,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   }),
 
   updateObjectives: (delta) => set((state) => {
+    if (state.gameState !== 'playing') return {};
+
     const captureRange = 8;
     const captureSpeed = 15; // Percent per second
     const decaySpeed = 5;
@@ -1478,6 +1484,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       return { ...obj, isBeingCaptured, progress: newProgress, controlledBy: newControlledBy, timer: newTimer };
     });
+
+    const isFinished = objectives.length > 0 && objectives.every(obj => obj.progress >= 100);
+    if (isFinished) {
+      soundManager.play('objective', 1.0);
+      setTimeout(() => {
+        state.addVoiceLine("NEXUS ONE", "Mission accomplished. Integrity is optimal. Return when ready.");
+      }, 500);
+      
+      const { socket } = get();
+      if (socket) {
+        socket.disconnect();
+      }
+      return { 
+        objectives,
+        gameState: 'victory',
+        socket: null
+      };
+    }
 
     return { objectives };
   }),
