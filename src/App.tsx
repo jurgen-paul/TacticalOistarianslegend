@@ -694,7 +694,7 @@ export default function App() {
               <div className="aspect-video w-full bg-black border-2 border-cyan-500/30 rounded-sm overflow-hidden shadow-[0_0_30px_rgba(34,211,238,0.1)] relative group">
                 <iframe 
                   className="w-full h-full opacity-80 group-hover:opacity-100 transition-opacity duration-500"
-                  src="https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1&mute=1&loop=1&playlist=dQw4w9WgXcQ&controls=0&modestbranding=1" 
+                  src="https://www.youtube.com/embed/JkqvxQ03Izo?autoplay=1&mute=1&loop=1&playlist=JkqvxQ03Izo&controls=0&modestbranding=1" 
                   title="Tactical Legends Trailer"
                   frameBorder="0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 

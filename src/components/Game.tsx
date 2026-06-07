@@ -77,6 +77,9 @@ export function Game() {
         preserveDrawingBuffer: false,
         failIfMajorPerformanceCaveat: false
       }}
+      onCreated={(state) => {
+        state.gl.debug.checkShaderErrors = false;
+      }}
     >
       <color attach="background" args={['#050510']} />
       <fogExp2 attach="fog" args={['#050510', 0.03]} />

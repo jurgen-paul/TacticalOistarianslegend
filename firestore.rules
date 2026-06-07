@@ -68,7 +68,7 @@ service cloud.firestore {
                     && isValidUserProfile(incoming())
                     && incoming().createdAt == request.time
                     && incoming().keys().hasAll(['displayName', 'email', 'highScore', 'createdAt'])
-                    && incoming().keys().size() == 4;
+                    && incoming().keys().hasOnly(['displayName', 'email', 'photoURL', 'highScore', 'createdAt']);
 
       // Update profile: only allowed to update highScore and updatedAt via this transaction
       allow update: if isVerified() 
@@ -90,8 +90,7 @@ service cloud.firestore {
     // Matches leaderboard/{entryId}
     match /leaderboard/{entryId} {
       // Public reading & list queries
-      allow get: if isValidId(entryId);
-      allow list: if true;
+      allow read: if true;
 
       // Post high scores: completely immutable entries
       allow create: if isVerified()
